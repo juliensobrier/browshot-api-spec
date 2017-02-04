@@ -4,7 +4,7 @@ swagger: '2.0'
 info:
   title: Browshot API
   description: Take screenshots of any website in real time
-  version: "1.16.0"
+  version: "1.17.0"
   contact: 
     name: API Support
     email: "support@browshot.com"
@@ -30,6 +30,8 @@ paths:
   /screenshot/create:
     get:
       summary: Request a screenshot
+      operationId: CreateScreenshot
+      x-ms-trigger: none
       description: |
         Screenshots requests to private and shared instances require a positive balance.
         
@@ -157,7 +159,7 @@ paths:
           default: 5
           
           
-          # Hosting
+        # Hosting
         - name: hosting
           in: query
           description: hosting option - s3 or browshot
@@ -211,6 +213,8 @@ paths:
   /screenshot/multiple:
     get:
       summary: Request multiple screenshots
+      operationId: CreateMultipleScreenshots
+      x-ms-trigger: none
       description: |
         Request multiple screenshots in one API call. The API call accepts all the parameters supported by screenshot/create.
         You can specify up to 10 URLs and 10 instances for a total of 100 screenshots in one API call.
@@ -373,6 +377,7 @@ paths:
   /screenshot/info:
     get:
       summary: Query screenshot status
+      operationId: GetScreenshotInfo
       description: Once a screenshot has been requested, its status must be checked until it is either "error" or "finished".
       parameters:
         - name: id
@@ -404,8 +409,10 @@ paths:
 
   /screenshot/list:
     get:
-      summary: Get information about the last 100 screenshots requested.
+      summary: Get information about screenshots
+      operationId: GetMultipleScreenshotsInfo
       description: Get information about the last 100 screenshots requested.
+      x-ms-visibility: none
       parameters:
         - name: limit
           in: query
@@ -439,8 +446,10 @@ paths:
             
   /screenshot/search:
     get:
-      summary: Search for screenshots of a specific URL.
+      summary: Search for screenshots
+      operationId: SearchScreenshot
       description: Search for screenshots of a specific URL.
+      x-ms-visibility: none
       parameters:
         - name: url
           in: query
@@ -481,6 +490,8 @@ paths:
     get:
       summary: Host thumbnails on your own S3 account or on Browshot.
       description: You can host screenshots and thumbnails on your own S3 account or on Browshot.
+      x-ms-trigger: none
+      operationId: HostScreenshot
       parameters:
         - name: id
           in: query
@@ -543,6 +554,8 @@ paths:
   /screenshot/thumbnail:
     get:
       summary: Retrieve a thumbnail image
+      operationId: GetThumbnail
+      x-ms-trigger: none
       description: |
         Unlike the other API calls, this API sends back the thumbnail as a PNG file, not JSON. The HTTP response code indicates whether the screenshot was successful (200), or incomplete (404) or failed (404). If the screenshot failed or is not finished, a default image "Not found" is sent.
         
@@ -646,6 +659,8 @@ paths:
   /screenshot/share:
     get:
       summary: Share a screenshot
+      operationId: ShareScreenshot
+      x-ms-trigger: none
       description: |
         You can make your screenshots public, add notes, and share it with your friends and colleagues. Only screenshots which are successfully completed can be shared.n the thumbnail. You can take a 1024x768 screenshot, crop it to 768x768, and get it scaled down to 300x300.
       parameters:
@@ -676,6 +691,8 @@ paths:
   /screenshot/delete:
     get:
       summary: Delete screenshot data
+      operationId: DeleteScreenshot
+      x-ms-trigger: none
       description: |
         You can delete details of your screenshots to remove any confidential information.
       parameters:
@@ -708,6 +725,7 @@ paths:
   /screenshot/html:
     get:
       summary: Get the HTML code
+      operationId: GetHTML
       description: |
         Retrieve the HTML code of the rendered page. This API call should be used when html=1 was specified in the screenshot request.
       produces:
@@ -730,6 +748,8 @@ paths:
       consumes: 
         - multipart/form-data
       summary: Requests thousands of screenshtos at once
+      operationId: CreateBatch
+      x-ms-trigger: none
       description: |
         Get hundreds or thousands of screenshots from a text file. You can use this API call or the dashboard. Unlike the other API calls, you must issue a POST request with the Content-Type "multipart/form-data" in order to upload the text file. The text file must contain the list of URLs to request, 1 URL per line. Failed screenshots will be tried up to 3 times before giving up.
       parameters:
@@ -855,21 +875,43 @@ paths:
             - jpeg
           default: png
           
-        # Multiple screenshots
-        - name: shots
-          in: formData
-          description: take multiple screenshots of the same page. This costs 1 additional credit for every 2 additional screenshots.
+        # Hosting
+        - name: hosting
+          in: query
+          description: hosting option - s3 or browshot
+          type: string
+          enum:
+            - s3
+        - name: hosting_height
+          in: query
+          description: maximum height of the thumbnail to host
           type: integer
           minimum: 1
-          maximum: 10
+          maximum: 15000
+        - name: hosting_width
+          in: query
+          description: maximum height of the thumbnail to host
+          type: integer
+          minimum: 1
+          maximum: 2000
+        - name: hosting_scale
+          in: query
+          description: scale of the thumbnail to host
+          type: number
+          format: float
           default: 1
-        - name: shot_interval
-          in: formData
-          description: number of seconds between 2 screenshots
-          type: integer
-          minimum: 1
-          maximum: 10
-          default: 5
+        - name: hosting_bucket
+          in: query
+          description: S3 bucket to upload the screenshot or thumbnail (required for S3)
+          type: string
+        - name: hosting_file
+          in: query
+          description: file name to use (for S3 only)
+          type: string
+        - name: hosting_headers
+          in: query
+          description: list of headers to add to the S3 object (for S3 only)
+          type: string
           
       tags:
         - Batch
@@ -888,6 +930,7 @@ paths:
   /batch/info:
     get:
       summary: Get the batch status
+      operationId: GetBatchInfo
       description: |
         Get the status of a batch requested through the API or through the dashboard.
       parameters:
@@ -911,8 +954,10 @@ paths:
             
   /account/info:
     get:
-      summary: Get information about your account.
+      summary: Get information about your account
+      operationId: GetAccountInfo
       description: Get information about your account.
+      x-ms-trigger: single
       parameters:
         - name: details
           in: query
@@ -938,7 +983,9 @@ paths:
   /instance/info:
     get:
       summary: Get information about an instance
+      operationId: GetInstanceInfo
       description: Get information about an instance.
+      x-ms-visibility: none
       parameters:
         - name: id
           in: query
@@ -956,12 +1003,14 @@ paths:
         default:
           description: Account not found
           schema:
-            $ref: '#/definitions/InstanceError'            
+            $ref: '#/definitions/InstanceError'
             
   /instance/list:
     get:
       summary: Get all instances
+      operationId: GetInstancesInfo
       description: Get all instances.
+      x-ms-visibility: none
           
       tags:
         - Instance
@@ -979,7 +1028,9 @@ paths:
   /browser/info:
     get:
       summary: Get information about a browser
+      operationId: GetBrowserInfo
       description: Get information about a browser.
+      x-ms-visibility: none
       parameters:
         - name: id
           in: query
@@ -997,12 +1048,14 @@ paths:
         default:
           description:  Browser not found
           schema:
-            $ref: '#/definitions/BrowserError'            
+            $ref: '#/definitions/BrowserError'
             
   /browser/list:
     get:
       summary: Get all browsers
+      operationId: GetBrowsersInfo
       description: Get all browsers.
+      x-ms-visibility: none
           
       tags:
         -  Browser
@@ -1014,7 +1067,7 @@ paths:
         default:
           description: Account not found
           schema:
-            $ref: '#/definitions/BrowserError'             
+            $ref: '#/definitions/BrowserError'
             
 definitions:
   ScreenshotError:
