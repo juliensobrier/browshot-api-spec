@@ -1,10 +1,28 @@
-# this is an example of the Uber API
-# as a demonstration of an API spec in YAML
 swagger: '2.0'
 info:
   title: Browshot API
-  description: Take screenshots of any website in real time
-  version: "1.17.0"
+  description: |
+    Capture web pages as screenshots, PDFs, videos, and animated GIFs.
+
+    Use instance_id to select a browser and capture country. Look up available
+    instances with /instance/list or /instance/info. The new native shared instances
+    cost one credit per screenshot before optional features.
+
+    | Country | Chrome | Firefox | iPhone 12 | Samsung S20 |
+    | --- | --- | --- | --- | --- |
+    | France | 373 | 374 | 375 | 376 |
+    | India | 377 | 378 | 379 | 380 |
+    | Finland | 381 | 382 | 383 | 384 |
+    | United Kingdom | 385 | 386 | 387 | 388 |
+
+    PDF adds one credit and video adds one credit per started five seconds of the
+    requested duration for WebM, MP4, and GIF. These options require a paid Chrome-based
+    instance. Retina and ad blocking add no credits. Downloading an existing PDF or
+    video adds no credits.
+
+    Boolean capture options use 0 and 1. The API also accepts false and true as
+    string values. Supply PDF settings with pdf=1 and video settings with video=1.
+  version: "1.32.0"
   contact: 
     name: API Support
     email: "support@browshot.com"
@@ -24,8 +42,13 @@ securityDefinitions:
     type: apiKey
     name: key
     in: query
+  apiKeyHeader:
+    type: apiKey
+    name: X-API-KEY
+    in: header
 security:
- - apiKeyQuery: []
+  - apiKeyQuery: []
+  - apiKeyHeader: []
 paths:
   /screenshot/create:
     get:
@@ -46,7 +69,7 @@ paths:
           type: string
         - name: instance_id
           in: query
-          description: instance ID to use
+          description: Instance ID to use. Select a native capture country through this ID.
           required: true
           type: integer
           
@@ -197,6 +220,25 @@ paths:
           in: query
           description: list of headers to add to the S3 object (for S3 only)
           type: string
+        # API 1.32 capture options
+        - $ref: '#/parameters/device_scale'
+        - $ref: '#/parameters/hide_ads'
+        - $ref: '#/parameters/pdf'
+        - $ref: '#/parameters/pdf_format'
+        - $ref: '#/parameters/pdf_background'
+        - $ref: '#/parameters/pdf_one_page'
+        - $ref: '#/parameters/pdf_landscape'
+        - $ref: '#/parameters/pdf_margin'
+        - $ref: '#/parameters/pdf_margin_top'
+        - $ref: '#/parameters/pdf_margin_bottom'
+        - $ref: '#/parameters/pdf_margin_left'
+        - $ref: '#/parameters/pdf_margin_right'
+        - $ref: '#/parameters/video'
+        - $ref: '#/parameters/video_format'
+        - $ref: '#/parameters/video_duration'
+        - $ref: '#/parameters/video_quality'
+        - $ref: '#/parameters/video_fps'
+        - $ref: '#/parameters/video_scale'
       tags:
         - Screenshot
       responses:
@@ -204,6 +246,12 @@ paths:
           description: Request accepted
           schema:
             $ref: '#/definitions/Screenshot'
+        400:
+          $ref: '#/responses/InvalidRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        503:
+          $ref: '#/responses/Unavailable'
         403:
           description: Error
           schema:
@@ -223,14 +271,21 @@ paths:
         # Required
         - name: url
           in: query
-          description: URL of the page to get a screenshot for. You can specify multiple url parameters (up to 10).
+          description: URLs of the pages to capture. Repeat the query parameter for multiple URLs.
           required: true
-          type: string
+          type: array
+          items:
+            type: string
+          collectionFormat: multi
+          maxItems: 10
         - name: instance_id
           in: query
-          description: instance ID to use. You can specify multiple instance_id parameters (up to 10).
-          required: true
-          type: integer
+          description: Instance IDs to use. Repeat the query parameter for multiple instances. Defaults to instance 12. Options and credit costs apply to each URL and instance pair.
+          type: array
+          items:
+            type: integer
+          collectionFormat: multi
+          maxItems: 10
           
         # Common parameters 
         - name: size
@@ -323,6 +378,8 @@ paths:
           in: query
           description: any custom HTTP headers. (Not supported with Internet Explorer)
           type: string
+        - $ref: '#/parameters/device_scale'
+        - $ref: '#/parameters/hide_ads'
           
           # Hosting
         - name: hosting
@@ -362,6 +419,26 @@ paths:
           in: query
           description: list of headers to add to the S3 object (for S3 only)
           type: string
+
+        # PDF
+        - $ref: '#/parameters/pdf'
+        - $ref: '#/parameters/pdf_format'
+        - $ref: '#/parameters/pdf_background'
+        - $ref: '#/parameters/pdf_one_page'
+        - $ref: '#/parameters/pdf_landscape'
+        - $ref: '#/parameters/pdf_margin'
+        - $ref: '#/parameters/pdf_margin_top'
+        - $ref: '#/parameters/pdf_margin_bottom'
+        - $ref: '#/parameters/pdf_margin_left'
+        - $ref: '#/parameters/pdf_margin_right'
+
+        # Video
+        - $ref: '#/parameters/video'
+        - $ref: '#/parameters/video_format'
+        - $ref: '#/parameters/video_duration'
+        - $ref: '#/parameters/video_quality'
+        - $ref: '#/parameters/video_fps'
+        - $ref: '#/parameters/video_scale'
       tags:
         - Screenshot
       responses:
@@ -369,6 +446,12 @@ paths:
           description: Request accepted
           schema:
             $ref: '#/definitions/ScreenshotList'
+        400:
+          $ref: '#/responses/InvalidRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        503:
+          $ref: '#/responses/Unavailable'
         403:
           description: Error
           schema:
@@ -399,9 +482,15 @@ paths:
         200:
           description: Screenshot found
           schema:
-            type: array
-            items:
-              $ref: '#/definitions/Screenshot'
+            $ref: '#/definitions/Screenshot'
+        400:
+          $ref: '#/responses/InvalidRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        404:
+          $ref: '#/responses/NotFound'
+        503:
+          $ref: '#/responses/Unavailable'
         default:
           description: Screenshot not found
           schema:
@@ -436,9 +525,7 @@ paths:
         200:
           description: list of screenshot information
           schema:
-            type: array
-            items:
-              $ref: '#/definitions/ScreenshotList'
+            $ref: '#/definitions/ScreenshotList'
         default:
           description: Screenshot not found
           schema:
@@ -478,9 +565,7 @@ paths:
         200:
           description: list of screenshot information
           schema:
-            type: array
-            items:
-              $ref: '#/definitions/ScreenshotList'
+            $ref: '#/definitions/ScreenshotList'
         default:
           description: Screenshot not found
           schema:
@@ -743,15 +828,119 @@ paths:
         default:
           description: HTML code
 
-  /batch/ceate:
+  /screenshot/pdf:
+    parameters:
+      - $ref: '#/parameters/ArtifactScreenshotId'
+    get:
+      summary: Download a screenshot PDF
+      operationId: GetScreenshotPDF
+      description: |
+        Download the PDF from a finished screenshot owned by your account.
+        Enable pdf=1 when creating the capture and wait for screenshot/info to
+        return status=finished. Error responses are JSON.
+      produces:
+        - application/pdf
+        - application/json
+      tags:
+        - Screenshot
+      responses:
+        200:
+          $ref: '#/responses/PDFDownload'
+        400:
+          $ref: '#/responses/InvalidRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        404:
+          $ref: '#/responses/NotFound'
+        503:
+          $ref: '#/responses/Unavailable'
+    post:
+      summary: Download a screenshot PDF
+      operationId: PostScreenshotPDF
+      description: |
+        Download the PDF from a finished screenshot owned by your account.
+        Enable pdf=1 when creating the capture and wait for screenshot/info to
+        return status=finished. Error responses are JSON.
+      produces:
+        - application/pdf
+        - application/json
+      tags:
+        - Screenshot
+      responses:
+        200:
+          $ref: '#/responses/PDFDownload'
+        400:
+          $ref: '#/responses/InvalidRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        404:
+          $ref: '#/responses/NotFound'
+        503:
+          $ref: '#/responses/Unavailable'
+
+  /screenshot/video:
+    parameters:
+      - $ref: '#/parameters/ArtifactScreenshotId'
+    get:
+      summary: Download a screenshot video
+      operationId: GetScreenshotVideo
+      description: |
+        Download the video from a finished screenshot owned by your account.
+        Enable video=1 when creating the capture and wait for screenshot/info to
+        return status=finished. Error responses are JSON.
+      produces:
+        - video/webm
+        - video/mp4
+        - image/gif
+        - application/json
+      tags:
+        - Screenshot
+      responses:
+        200:
+          $ref: '#/responses/VideoDownload'
+        400:
+          $ref: '#/responses/InvalidRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        404:
+          $ref: '#/responses/NotFound'
+        503:
+          $ref: '#/responses/Unavailable'
+    post:
+      summary: Download a screenshot video
+      operationId: PostScreenshotVideo
+      description: |
+        Download the video from a finished screenshot owned by your account.
+        Enable video=1 when creating the capture and wait for screenshot/info to
+        return status=finished. Error responses are JSON.
+      produces:
+        - video/webm
+        - video/mp4
+        - image/gif
+        - application/json
+      tags:
+        - Screenshot
+      responses:
+        200:
+          $ref: '#/responses/VideoDownload'
+        400:
+          $ref: '#/responses/InvalidRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        404:
+          $ref: '#/responses/NotFound'
+        503:
+          $ref: '#/responses/Unavailable'
+
+  /batch/create:
     post:
       consumes: 
         - multipart/form-data
-      summary: Requests thousands of screenshtos at once
+      summary: Requests thousands of screenshots at once
       operationId: CreateBatch
       x-ms-trigger: none
       description: |
-        Get hundreds or thousands of screenshots from a text file. You can use this API call or the dashboard. Unlike the other API calls, you must issue a POST request with the Content-Type "multipart/form-data" in order to upload the text file. The text file must contain the list of URLs to request, 1 URL per line. Failed screenshots will be tried up to 3 times before giving up.
+        Get hundreds or thousands of screenshots from a text file. You can use this API call or the dashboard. Unlike the other API calls, you must issue a POST request with the Content-Type "multipart/form-data" in order to upload the text file. The text file must contain the list of URLs to request, 1 URL per line. API 1.32 options and credit costs apply to each capture. Failed screenshots will be tried up to 3 times before giving up.
       parameters:
         - name: instance_id
           in: formData
@@ -762,8 +951,9 @@ paths:
           in: formData
           description: text file to use
           type: file
+          required: true
           
-                # Common parameters 
+        # Common parameters
         - name: size
           in: formData
           description: screenshots size - "screen" (default) or "page"
@@ -913,15 +1103,126 @@ paths:
           description: list of headers to add to the S3 object (for S3 only)
           type: string
           
+        # API 1.32 capture options
+        - name: device_scale
+          in: formData
+          description: Pixel density multiplier. Use 2 for retina output at the same CSS viewport size. Defaults to the instance setting, normally 1. The retina viewport is limited to 20 million physical pixels. Video requires a scale of 1.
+          type: integer
+          enum: [1, 2]
+        - name: hide_ads
+          in: formData
+          description: Block advertising requests and hide matching ad elements. Adds no credits.
+          type: integer
+          enum: [0, 1]
+          default: 0
+
+          # PDF
+        - name: pdf
+          in: formData
+          description: Generate a PDF in addition to the screenshot. Requires a paid Chrome-based instance and adds one credit. Use pdf=1 when supplying pdf_* options.
+          type: integer
+          enum: [0, 1]
+          default: 0
+        - name: pdf_format
+          in: formData
+          description: PDF paper size. Ignored when pdf_one_page is enabled. Defaults to letter.
+          type: string
+          enum: [letter, a4, legal]
+        - name: pdf_background
+          in: formData
+          description: Include background colors and images in the PDF. Defaults to 0.
+          type: integer
+          enum: [0, 1]
+        - name: pdf_one_page
+          in: formData
+          description: Create one long PDF page using the viewport width and document height. Defaults to 0.
+          type: integer
+          enum: [0, 1]
+        - name: pdf_landscape
+          in: formData
+          description: Use landscape orientation for the PDF. Defaults to 0.
+          type: integer
+          enum: [0, 1]
+        - name: pdf_margin
+          in: formData
+          description: Set all four PDF margins to a nonnegative length. Units can be px, mm, cm, or in. A value without units is in pixels. Defaults to 0px.
+          type: string
+          pattern: '^\d+(\.\d+)?(px|mm|cm|in)?$'
+          maxLength: 32
+        - name: pdf_margin_top
+          in: formData
+          description: Override the top PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: '^\d+(\.\d+)?(px|mm|cm|in)?$'
+          maxLength: 32
+        - name: pdf_margin_bottom
+          in: formData
+          description: Override the bottom PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: '^\d+(\.\d+)?(px|mm|cm|in)?$'
+          maxLength: 32
+        - name: pdf_margin_left
+          in: formData
+          description: Override the left PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: '^\d+(\.\d+)?(px|mm|cm|in)?$'
+          maxLength: 32
+        - name: pdf_margin_right
+          in: formData
+          description: Override the right PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: '^\d+(\.\d+)?(px|mm|cm|in)?$'
+          maxLength: 32
+
+          # Video
+        - name: video
+          in: formData
+          description: Record a video or animated GIF in addition to the screenshot. Requires a paid Chrome-based instance at device scale 1. Adds one credit per started five seconds. Use video=1 when supplying video_* options.
+          type: integer
+          enum: [0, 1]
+          default: 0
+        - name: video_format
+          in: formData
+          description: Recording format. If MP4 encoding is unavailable, the capture can produce WebM. Defaults to webm.
+          type: string
+          enum: [webm, mp4, gif]
+        - name: video_duration
+          in: formData
+          description: Maximum recording duration in seconds. Charges are calculated from the requested duration. Defaults to 15 seconds.
+          type: integer
+          minimum: 1
+          maximum: 30
+        - name: video_quality
+          in: formData
+          description: Recording quality. Lower values mean higher quality. Defaults to 30.
+          type: integer
+          minimum: 0
+          maximum: 63
+        - name: video_fps
+          in: formData
+          description: Target frames per second for WebM and MP4. GIF uses 20 fps and ignores this value. Defaults to 30 for WebM and MP4.
+          type: integer
+          minimum: 1
+          maximum: 30
+        - name: video_scale
+          in: formData
+          description: Multiplier for recorded width and height. Defaults to 1 for WebM and MP4 and 0.5 for GIF.
+          type: number
+          minimum: 0.1
+          maximum: 1
       tags:
         - Batch
       responses:
         200:
           description: batch information
           schema:
-            type: array
-            items:
-              $ref: '#/definitions/Batch'
+            $ref: '#/definitions/Batch'
+        400:
+          $ref: '#/responses/InvalidRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        503:
+          $ref: '#/responses/Unavailable'
         default:
           description: Batch not created
           schema:
@@ -952,6 +1253,106 @@ paths:
           schema:
             $ref: '#/definitions/BatchError'
             
+  /crawl/create:
+    get:
+      summary: Start a crawl and capture its pages
+      operationId: CreateCrawl
+      description: |
+        Crawl a domain starting from a URL. API 1.32 options and credit costs apply
+        to each capture. The API captures links to discover other pages.
+      parameters:
+        - name: domain
+          in: query
+          description: Domain to crawl.
+          type: string
+          maxLength: 255
+          required: true
+        - name: url
+          in: query
+          description: Starting URL. Defaults to the root URL of the domain.
+          type: string
+        - name: instance_id
+          in: query
+          description: Instance ID to use. Select a native capture country through this ID.
+          type: integer
+          default: 65
+        - name: max
+          in: query
+          description: Maximum number of pages to crawl.
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 100
+        - name: name
+          in: query
+          description: Name of the crawl.
+          type: string
+        - name: size
+          in: query
+          description: Capture the viewport or the full page.
+          type: string
+          enum: [screen, page]
+          default: screen
+        - $ref: '#/parameters/device_scale'
+        - $ref: '#/parameters/hide_ads'
+        - $ref: '#/parameters/pdf'
+        - $ref: '#/parameters/pdf_format'
+        - $ref: '#/parameters/pdf_background'
+        - $ref: '#/parameters/pdf_one_page'
+        - $ref: '#/parameters/pdf_landscape'
+        - $ref: '#/parameters/pdf_margin'
+        - $ref: '#/parameters/pdf_margin_top'
+        - $ref: '#/parameters/pdf_margin_bottom'
+        - $ref: '#/parameters/pdf_margin_left'
+        - $ref: '#/parameters/pdf_margin_right'
+        - $ref: '#/parameters/video'
+        - $ref: '#/parameters/video_format'
+        - $ref: '#/parameters/video_duration'
+        - $ref: '#/parameters/video_quality'
+        - $ref: '#/parameters/video_fps'
+        - $ref: '#/parameters/video_scale'
+      tags:
+        - Crawl
+      responses:
+        200:
+          description: Crawl accepted
+          schema:
+            $ref: '#/definitions/Crawl'
+        400:
+          $ref: '#/responses/InvalidRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        503:
+          $ref: '#/responses/Unavailable'
+
+  /crawl/info:
+    get:
+      summary: Get crawl status and screenshots
+      operationId: GetCrawlInfo
+      parameters:
+        - name: id
+          in: query
+          description: Crawl ID returned by /crawl/create.
+          type: integer
+          format: int64
+          minimum: 1
+          required: true
+      tags:
+        - Crawl
+      responses:
+        200:
+          description: Crawl status and screenshot details
+          schema:
+            $ref: '#/definitions/Crawl'
+        400:
+          $ref: '#/responses/InvalidRequest'
+        401:
+          $ref: '#/responses/Unauthorized'
+        404:
+          $ref: '#/responses/NotFound'
+        503:
+          $ref: '#/responses/Unavailable'
+
   /account/info:
     get:
       summary: Get information about your account
@@ -1069,7 +1470,217 @@ paths:
           schema:
             $ref: '#/definitions/BrowserError'
             
+parameters:
+  ArtifactScreenshotId:
+    name: id
+    in: query
+    description: Screenshot ID returned by /screenshot/create or /screenshot/info.
+    required: true
+    type: integer
+    format: int64
+    minimum: 1
+  device_scale:
+    name: device_scale
+    in: query
+    description: Pixel density multiplier. Use 2 for retina output at the same CSS viewport size. Defaults to the instance setting, normally 1. The retina viewport is limited to 20 million physical pixels. Video requires a scale of 1.
+    type: integer
+    enum: [1, 2]
+  hide_ads:
+    name: hide_ads
+    in: query
+    description: Block advertising requests and hide matching ad elements. Adds no credits.
+    type: integer
+    enum: [0, 1]
+    default: 0
+  pdf:
+    name: pdf
+    in: query
+    description: Generate a PDF in addition to the screenshot. Requires a paid Chrome-based instance and adds one credit. Use pdf=1 when supplying pdf_* options.
+    type: integer
+    enum: [0, 1]
+    default: 0
+  pdf_format:
+    name: pdf_format
+    in: query
+    description: PDF paper size. Ignored when pdf_one_page is enabled. Defaults to letter.
+    type: string
+    enum: [letter, a4, legal]
+  pdf_background:
+    name: pdf_background
+    in: query
+    description: Include background colors and images in the PDF. Defaults to 0.
+    type: integer
+    enum: [0, 1]
+  pdf_one_page:
+    name: pdf_one_page
+    in: query
+    description: Create one long PDF page using the viewport width and document height. Defaults to 0.
+    type: integer
+    enum: [0, 1]
+  pdf_landscape:
+    name: pdf_landscape
+    in: query
+    description: Use landscape orientation for the PDF. Defaults to 0.
+    type: integer
+    enum: [0, 1]
+  pdf_margin:
+    name: pdf_margin
+    in: query
+    description: Set all four PDF margins to a nonnegative length. Units can be px, mm, cm, or in. A value without units is in pixels. Defaults to 0px.
+    type: string
+    pattern: '^\d+(\.\d+)?(px|mm|cm|in)?$'
+    maxLength: 32
+  pdf_margin_top:
+    name: pdf_margin_top
+    in: query
+    description: Override the top PDF margin. Defaults to pdf_margin.
+    type: string
+    pattern: '^\d+(\.\d+)?(px|mm|cm|in)?$'
+    maxLength: 32
+  pdf_margin_bottom:
+    name: pdf_margin_bottom
+    in: query
+    description: Override the bottom PDF margin. Defaults to pdf_margin.
+    type: string
+    pattern: '^\d+(\.\d+)?(px|mm|cm|in)?$'
+    maxLength: 32
+  pdf_margin_left:
+    name: pdf_margin_left
+    in: query
+    description: Override the left PDF margin. Defaults to pdf_margin.
+    type: string
+    pattern: '^\d+(\.\d+)?(px|mm|cm|in)?$'
+    maxLength: 32
+  pdf_margin_right:
+    name: pdf_margin_right
+    in: query
+    description: Override the right PDF margin. Defaults to pdf_margin.
+    type: string
+    pattern: '^\d+(\.\d+)?(px|mm|cm|in)?$'
+    maxLength: 32
+  video:
+    name: video
+    in: query
+    description: Record a video or animated GIF in addition to the screenshot. Requires a paid Chrome-based instance at device scale 1. Adds one credit per started five seconds. Use video=1 when supplying video_* options.
+    type: integer
+    enum: [0, 1]
+    default: 0
+  video_format:
+    name: video_format
+    in: query
+    description: Recording format. If MP4 encoding is unavailable, the capture can produce WebM. Defaults to webm.
+    type: string
+    enum: [webm, mp4, gif]
+  video_duration:
+    name: video_duration
+    in: query
+    description: Maximum recording duration in seconds. Charges are calculated from the requested duration. Defaults to 15 seconds.
+    type: integer
+    minimum: 1
+    maximum: 30
+  video_quality:
+    name: video_quality
+    in: query
+    description: Recording quality. Lower values mean higher quality. Defaults to 30.
+    type: integer
+    minimum: 0
+    maximum: 63
+  video_fps:
+    name: video_fps
+    in: query
+    description: Target frames per second for WebM and MP4. GIF uses 20 fps and ignores this value. Defaults to 30 for WebM and MP4.
+    type: integer
+    minimum: 1
+    maximum: 30
+  video_scale:
+    name: video_scale
+    in: query
+    description: Multiplier for recorded width and height. Defaults to 1 for WebM and MP4 and 0.5 for GIF.
+    type: number
+    minimum: 0.1
+    maximum: 1
+responses:
+  PDFDownload:
+    description: PDF file (application/pdf).
+    schema:
+      type: file
+    headers:
+      Content-Disposition:
+        description: 'attachment; filename="screenshot.pdf"'
+        type: string
+  VideoDownload:
+    description: WebM (video/webm), MP4 (video/mp4), or animated GIF (image/gif).
+    schema:
+      type: file
+    headers:
+      Content-Disposition:
+        description: Attachment filename is screenshot.webm, screenshot.mp4, or screenshot.gif.
+        type: string
+  InvalidRequest:
+    description: Invalid request parameters or insufficient credits. For downloads, check the screenshot ID.
+    schema:
+      $ref: '#/definitions/ApiError'
+  Unauthorized:
+    description: Missing or invalid API key.
+    schema:
+      $ref: '#/definitions/ApiError'
+  NotFound:
+    description: Resource is missing or belongs to another account. Downloads also return 404 if the capture is unfinished or the artifact is missing or deleted.
+    schema:
+      $ref: '#/definitions/ApiError'
+  Unavailable:
+    description: Unable to process the request or retrieve the file temporarily.
+    schema:
+      $ref: '#/definitions/ApiError'
 definitions:
+  ApiError:
+    type: object
+    required:
+      - success
+      - error
+      - message
+    properties:
+      success:
+        type: boolean
+        enum: [false]
+      error:
+        type: string
+        description: Machine-readable error code.
+        enum: [INVALID_REQUEST, UNAUTHORIZED, NOT_FOUND, API_UNAVAILABLE]
+      message:
+        type: string
+        description: Human-readable error message.
+
+  Crawl:
+    type: object
+    properties:
+      id:
+        type: integer
+        format: int64
+        description: Crawl ID.
+      status:
+        type: string
+        enum: [in_queue, in_process, finished, error]
+      started:
+        type: integer
+        description: Start time as a Unix timestamp.
+      finished:
+        type: integer
+        description: Completion time as a Unix timestamp, or 0 while pending.
+      count:
+        type: integer
+        description: Number of URLs discovered.
+      processed:
+        type: integer
+        description: Number of screenshots processed.
+      failed:
+        type: integer
+        description: Number of failed screenshots.
+      urls:
+        type: array
+        items:
+          $ref: '#/definitions/Screenshot'
+
   ScreenshotError:
     type: object
     properties:
@@ -1126,16 +1737,38 @@ definitions:
         type: integer
       status: 
         description: |
-          status of the request: "in_queue", "processing", "finished", "error"
+          status of the request: "in_queue", "in_process", "finished", "error"
         type: string
         enum:
          - in_queue
-         - processing
+         - in_process
          - finished
          - error
-      screenshot_url: 
-        description: URL to download the screenshot
-        format: string
+      screenshot_url:
+        description: URL to download the screenshot.
+        type: string
+      pdf:
+        description: Present with value 1 when the PDF was requested or is available.
+        type: integer
+        enum: [1]
+      pdf_url:
+        description: Authenticated PDF download URL, or an empty string while unavailable.
+        type: string
+      video:
+        description: Present with value 1 when video was requested or is available.
+        type: integer
+        enum: [1]
+      video_url:
+        description: Authenticated video or GIF download URL, or an empty string while unavailable.
+        type: string
+      device_scale:
+        description: Present with value 2 for a retina capture.
+        type: integer
+        enum: [2]
+      hide_ads:
+        description: Present with value 1 when ad blocking was enabled.
+        type: integer
+        enum: [1]
       error: 
         description: description of the problem that occurred
         type: string
@@ -1200,6 +1833,7 @@ definitions:
         type: string
         
   ScreenshotList:
+    description: Screenshots keyed by screenshot ID.
     type: object
     properties:
       default:
@@ -1233,12 +1867,8 @@ definitions:
         description: batch ID
       status:
         type: string
-        description: status of the request - "in_queue", "processing", "finished", "error"
-        enum:
-          - in_queue
-          - processing
-          - finished
-          - error
+        description: Batch status.
+        enum: [in_queue, in_process, finished, error]
       started:
         type: integer
         description: time of processing (UNIX timestamp)
@@ -1254,6 +1884,9 @@ definitions:
       failed:
         type: integer
         description: number of screenshots failed  
+      zip_url:
+        type: string
+        description: Authenticated URL to download the ZIP archive when the batch is finished.
       urls:
         type: array
         description: URLs to download the batch
@@ -1377,10 +2010,10 @@ definitions:
           - shared
           - private
       screenshot_cost: 
-        description: number of credits for each screenshot
+        description: Base number of credits per screenshot, before options such as PDF or video.
         type: integer
       country: 
-        description: instance's country of origin
+        description: Name of the instance's capture country.
         type: string
 
   InstanceError:
