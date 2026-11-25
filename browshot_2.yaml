@@ -1,0 +1,4296 @@
+# Internal draft. The website build publishes browshot.yaml.
+swagger: "2.0"
+info:
+  title: Browshot API (internal draft)
+  description: |-
+    Internal contract for Browshot API v2.
+    Request and response conventions and API key authentication follow Browshot v1.
+
+    Select a browser and capture country directly. Defaults are Chrome, United States,
+    a 1024 × 768 CSS pixel viewport, and desktop emulation. Supply viewport dimensions
+    and mobile mode, or select a named device from /device/list. The server rejects
+    device combined with screen_width, screen_height, or mobile. Unsupported browser,
+    country, device, or combination returns HTTP 400. Requests stay in the selected
+    country. A temporarily unavailable capture location returns HTTP 503.
+
+    Choose configured S3 and webhook apps using apps on capture requests. S3 runs after
+    a successful capture. Webhooks report finished and failed captures using the
+    screenshot/info response shape. Screenshot info includes separate app status.
+
+    A capture costs one credit. HTML and PDF each add one credit, each additional
+    shot adds one credit, and video adds one credit per started five seconds of
+    requested duration. PDF and video require Chrome. Retina and ad blocking add
+    no credits. Free monthly credits cover any v2 capture option and are used first,
+    followed by paid credits. The free allowance is shared with v1. Failed captures
+    and unavailable optional artifacts return the corresponding credits.
+
+    Capture and information requests use a single metadata format.
+    Boolean capture options accept 0 and 1. Where v1 accepted false and true as strings,
+    those strings remain accepted. Supply PDF settings with pdf=1 and video settings with video=1.
+  version: 2.0.0-draft
+  contact:
+    name: API Support
+    email: support@browshot.com
+    url: https://browshot.com/contact
+  termsOfService: https://browshot.com/terms
+host: api.browshot.com
+schemes:
+  - https
+basePath: /api/v2
+produces:
+  - application/json
+securityDefinitions:
+  apiKeyQuery:
+    type: apiKey
+    name: key
+    in: query
+  apiKeyHeader:
+    type: apiKey
+    name: X-API-KEY
+    in: header
+security:
+  - apiKeyQuery: []
+  - apiKeyHeader: []
+paths:
+  /screenshot/create:
+    get:
+      summary: Request a screenshot
+      operationId: CreateScreenshot
+      x-ms-trigger: none
+      description: Submit a capture using the selected browser, country, and viewport or device. The response
+        is the v1-shaped screenshot object with resolved capture settings.
+      parameters:
+        - name: url
+          in: query
+          description: URL of the page to get a screenshot for
+          required: true
+          type: string
+        - $ref: "#/parameters/browser"
+        - $ref: "#/parameters/country"
+        - $ref: "#/parameters/screen_width"
+        - $ref: "#/parameters/screen_height"
+        - $ref: "#/parameters/mobile"
+        - $ref: "#/parameters/device"
+        - name: size
+          in: query
+          description: screenshot size - "screen" (default) or "page"
+          type: string
+          enum:
+            - screen
+            - page
+          default: screen
+        - name: cache
+          in: query
+          description: Reuse a recent capture with the same URL, render settings, and tags within this many seconds. Use 0
+            for a fresh capture. App selections apply to that request, including eligible cached
+            captures.
+          type: integer
+          default: 86400
+        - name: delay
+          in: query
+          description: number of seconds to wait after the page has loaded. This is used to let JavaScript run
+            longer before taking the screenshot. Use delay=0 to take screenshots faster.
+          type: integer
+          default: 5
+          minimum: 0
+          maximum: 60
+        - name: referer
+          in: query
+          description: use a custom referrer header
+          type: string
+        - name: post_data
+          in: query
+          description: send a POST requests with post_data, useful for filling out forms
+          type: string
+        - name: cookie
+          in: query
+          description: set a cookie for the URL requested (see Custom POST Data, Referer and Cookie) Cookies should
+            be separated by a ;
+          type: string
+        - name: script
+          in: query
+          description: URL of javascript file to execute after the page load event
+          type: string
+        - name: html
+          in: query
+          description: saves the HTML of the rendered page which can be retrieved by the API call screenshot/html.
+            This feature costs *1 credit* per screenshot.
+          type: integer
+          minimum: 0
+          maximum: 1
+          default: 0
+        - name: max_wait
+          description: "maximum number of seconds to wait before triggering the PageLoad event. Note that delay
+            will still be used. (default: 0 = disabled)"
+          in: query
+          type: integer
+          minimum: 0
+          maximum: 60
+          default: 0
+        - name: headers
+          in: query
+          description: any custom HTTP headers. (Not supported with Internet Explorer)
+          type: string
+        - name: shots
+          in: query
+          description: Take multiple screenshots of the same page. Each additional shot costs one credit.
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 1
+        - name: shot_interval
+          in: query
+          description: number of seconds between 2 screenshots
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+        - $ref: "#/parameters/device_scale"
+        - $ref: "#/parameters/hide_ads"
+        - $ref: "#/parameters/pdf"
+        - $ref: "#/parameters/pdf_format"
+        - $ref: "#/parameters/pdf_background"
+        - $ref: "#/parameters/pdf_one_page"
+        - $ref: "#/parameters/pdf_landscape"
+        - $ref: "#/parameters/pdf_margin"
+        - $ref: "#/parameters/pdf_margin_top"
+        - $ref: "#/parameters/pdf_margin_bottom"
+        - $ref: "#/parameters/pdf_margin_left"
+        - $ref: "#/parameters/pdf_margin_right"
+        - $ref: "#/parameters/video"
+        - $ref: "#/parameters/video_format"
+        - $ref: "#/parameters/video_duration"
+        - $ref: "#/parameters/video_quality"
+        - $ref: "#/parameters/video_fps"
+        - $ref: "#/parameters/video_scale"
+        - $ref: "#/parameters/hide_popups"
+        - $ref: "#/parameters/steps"
+        - $ref: "#/parameters/trackers"
+        - $ref: "#/parameters/apps"
+        - $ref: "#/parameters/tag"
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          description: Request accepted
+          schema:
+            $ref: "#/definitions/Screenshot"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "403":
+          description: Error
+          schema:
+            $ref: "#/definitions/ScreenshotError"
+        "503":
+          $ref: "#/responses/Unavailable"
+    post:
+      summary: Request a screenshot
+      operationId: CreateScreenshotPost
+      x-ms-trigger: none
+      description: Submit a capture using the selected browser, country, and viewport or device. The response
+        is the v1-shaped screenshot object with resolved capture settings.
+      parameters:
+        - name: url
+          in: formData
+          description: URL of the page to get a screenshot for
+          required: true
+          type: string
+        - $ref: "#/parameters/form_browser"
+        - $ref: "#/parameters/form_country"
+        - $ref: "#/parameters/form_screen_width"
+        - $ref: "#/parameters/form_screen_height"
+        - $ref: "#/parameters/form_mobile"
+        - $ref: "#/parameters/form_device"
+        - name: size
+          in: formData
+          description: screenshot size - "screen" (default) or "page"
+          type: string
+          enum:
+            - screen
+            - page
+          default: screen
+        - name: cache
+          in: formData
+          description: Reuse a recent capture with the same URL, render settings, and tags within this many seconds. Use 0
+            for a fresh capture. App selections apply to that request, including eligible cached
+            captures.
+          type: integer
+          default: 86400
+        - name: delay
+          in: formData
+          description: number of seconds to wait after the page has loaded. This is used to let JavaScript run
+            longer before taking the screenshot. Use delay=0 to take screenshots faster.
+          type: integer
+          default: 5
+          minimum: 0
+          maximum: 60
+        - name: referer
+          in: formData
+          description: use a custom referrer header
+          type: string
+        - name: post_data
+          in: formData
+          description: send a POST requests with post_data, useful for filling out forms
+          type: string
+        - name: cookie
+          in: formData
+          description: set a cookie for the URL requested (see Custom POST Data, Referer and Cookie) Cookies should
+            be separated by a ;
+          type: string
+        - name: script
+          in: formData
+          description: URL of javascript file to execute after the page load event
+          type: string
+        - name: html
+          in: formData
+          description: saves the HTML of the rendered page which can be retrieved by the API call screenshot/html.
+            This feature costs *1 credit* per screenshot.
+          type: integer
+          minimum: 0
+          maximum: 1
+          default: 0
+        - name: max_wait
+          description: "maximum number of seconds to wait before triggering the PageLoad event. Note that delay
+            will still be used. (default: 0 = disabled)"
+          in: formData
+          type: integer
+          minimum: 0
+          maximum: 60
+          default: 0
+        - name: headers
+          in: formData
+          description: any custom HTTP headers. (Not supported with Internet Explorer)
+          type: string
+        - name: shots
+          in: formData
+          description: Take multiple screenshots of the same page. Each additional shot costs one credit.
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 1
+        - name: shot_interval
+          in: formData
+          description: number of seconds between 2 screenshots
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+        - name: device_scale
+          in: formData
+          description: Pixel density multiplier. Use 2 or 3 for retina output at the same CSS viewport size. Defaults to
+            1. The retina viewport is limited to 20 million physical pixels. Video requires a scale of 1.
+          type: integer
+          enum:
+            - 1
+            - 2
+            - 3
+        - name: hide_ads
+          in: formData
+          description: Block advertising requests and hide matching ad elements. Adds no credits.
+          type: integer
+          enum:
+            - 0
+            - 1
+          default: 0
+        - name: pdf
+          in: formData
+          description: Generate a PDF in addition to the screenshot. Requires a Chrome capture and adds one
+            credit. Use pdf=1 when supplying pdf_* options.
+          type: integer
+          enum:
+            - 0
+            - 1
+          default: 0
+        - name: pdf_format
+          in: formData
+          description: PDF paper size. Ignored when pdf_one_page is enabled. Defaults to letter.
+          type: string
+          enum:
+            - letter
+            - a4
+            - legal
+        - name: pdf_background
+          in: formData
+          description: Include background colors and images in the PDF. Defaults to 0.
+          type: integer
+          enum:
+            - 0
+            - 1
+        - name: pdf_one_page
+          in: formData
+          description: Create one long PDF page using the viewport width and document height. Defaults to 0.
+          type: integer
+          enum:
+            - 0
+            - 1
+        - name: pdf_landscape
+          in: formData
+          description: Use landscape orientation for the PDF. Defaults to 0.
+          type: integer
+          enum:
+            - 0
+            - 1
+        - name: pdf_margin
+          in: formData
+          description: Set all four PDF margins to a nonnegative length. Units can be px, mm, cm, or in. A value
+            without units is in pixels. Defaults to 0px.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_top
+          in: formData
+          description: Override the top PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_bottom
+          in: formData
+          description: Override the bottom PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_left
+          in: formData
+          description: Override the left PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_right
+          in: formData
+          description: Override the right PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: video
+          in: formData
+          description: Record a video or animated GIF in addition to the screenshot. Requires a Chrome capture
+            at device scale 1. Adds one credit per started five seconds. Use video=1 when supplying
+            video_* options.
+          type: integer
+          enum:
+            - 0
+            - 1
+          default: 0
+        - name: video_format
+          in: formData
+          description: Recording format. If MP4 encoding is unavailable, the capture can produce WebM. Defaults to
+            webm.
+          type: string
+          enum:
+            - webm
+            - mp4
+            - gif
+        - name: video_duration
+          in: formData
+          description: Maximum recording duration in seconds. Charges are calculated from the requested duration.
+            Defaults to 15 seconds.
+          type: integer
+          minimum: 1
+          maximum: 30
+        - name: video_quality
+          in: formData
+          description: Recording quality. Lower values mean higher quality. Defaults to 30.
+          type: integer
+          minimum: 0
+          maximum: 63
+        - name: video_fps
+          in: formData
+          description: Target frames per second for WebM and MP4. GIF uses 20 fps and ignores this value. Defaults
+            to 30 for WebM and MP4.
+          type: integer
+          minimum: 1
+          maximum: 30
+        - name: video_scale
+          in: formData
+          description: Multiplier for recorded width and height. Defaults to 1 for WebM and MP4 and 0.5 for GIF.
+          type: number
+          minimum: 0.1
+          maximum: 1
+        - $ref: "#/parameters/form_hide_popups"
+        - $ref: "#/parameters/form_steps"
+        - $ref: "#/parameters/form_trackers"
+        - $ref: "#/parameters/form_apps"
+        - $ref: "#/parameters/form_tag"
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          description: Request accepted
+          schema:
+            $ref: "#/definitions/Screenshot"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "403":
+          description: Error
+          schema:
+            $ref: "#/definitions/ScreenshotError"
+        "503":
+          $ref: "#/responses/Unavailable"
+      consumes:
+        - application/x-www-form-urlencoded
+  /screenshot/multiple:
+    get:
+      summary: Request multiple screenshots
+      operationId: CreateMultipleScreenshots
+      x-ms-trigger: none
+      description: Supply up to ten repeated url values. By default, all URLs use one set of capture settings.
+        Supply profiles to capture each URL with up to ten settings objects, for at most 100 captures.
+        The response is keyed by screenshot ID.
+      parameters:
+        - name: url
+          in: query
+          description: URLs of the pages to capture. Repeat the query parameter for multiple URLs.
+          required: true
+          type: array
+          items:
+            type: string
+          collectionFormat: multi
+          maxItems: 10
+        - $ref: "#/parameters/browser"
+        - $ref: "#/parameters/country"
+        - $ref: "#/parameters/screen_width"
+        - $ref: "#/parameters/screen_height"
+        - $ref: "#/parameters/mobile"
+        - $ref: "#/parameters/device"
+        - $ref: "#/parameters/profiles"
+        - name: size
+          in: query
+          description: screenshot size - "screen" (default) or "page"
+          type: string
+          enum:
+            - screen
+            - page
+          default: screen
+        - name: cache
+          in: query
+          description: Reuse a recent capture with the same URL, render settings, and tags within this many seconds. Use 0
+            for a fresh capture. App selections apply to that request, including eligible cached
+            captures.
+          type: integer
+          default: 86400
+        - name: delay
+          in: query
+          description: number of seconds to wait after the page has loaded. This is used to let JavaScript run
+            longer before taking the screenshot. Use delay=0 to take screenshots faster.
+          type: integer
+          default: 5
+          minimum: 0
+          maximum: 60
+        - name: referer
+          in: query
+          description: use a custom referrer header
+          type: string
+        - name: post_data
+          in: query
+          description: send a POST requests with post_data, useful for filling out forms
+          type: string
+        - name: cookie
+          in: query
+          description: set a cookie for the URL requested (see Custom POST Data, Referer and Cookie) Cookies should
+            be separated by a ;
+          type: string
+        - name: script
+          in: query
+          description: URL of javascript file to execute after the page load event
+          type: string
+        - name: html
+          in: query
+          description: saves the HTML of the rendered page which can be retrieved by the API call screenshot/html.
+            This feature costs *1 credit* per screenshot.
+          type: integer
+          minimum: 0
+          maximum: 1
+          default: 0
+        - name: max_wait
+          description: "maximum number of seconds to wait before triggering the PageLoad event. Note that delay
+            will still be used. (default: 0 = disabled)"
+          in: query
+          type: integer
+          minimum: 0
+          maximum: 60
+          default: 0
+        - name: headers
+          in: query
+          description: any custom HTTP headers. (Not supported with Internet Explorer)
+          type: string
+        - $ref: "#/parameters/device_scale"
+        - $ref: "#/parameters/hide_ads"
+        - $ref: "#/parameters/pdf"
+        - $ref: "#/parameters/pdf_format"
+        - $ref: "#/parameters/pdf_background"
+        - $ref: "#/parameters/pdf_one_page"
+        - $ref: "#/parameters/pdf_landscape"
+        - $ref: "#/parameters/pdf_margin"
+        - $ref: "#/parameters/pdf_margin_top"
+        - $ref: "#/parameters/pdf_margin_bottom"
+        - $ref: "#/parameters/pdf_margin_left"
+        - $ref: "#/parameters/pdf_margin_right"
+        - $ref: "#/parameters/video"
+        - $ref: "#/parameters/video_format"
+        - $ref: "#/parameters/video_duration"
+        - $ref: "#/parameters/video_quality"
+        - $ref: "#/parameters/video_fps"
+        - $ref: "#/parameters/video_scale"
+        - $ref: "#/parameters/hide_popups"
+        - $ref: "#/parameters/steps"
+        - $ref: "#/parameters/trackers"
+        - $ref: "#/parameters/apps"
+        - $ref: "#/parameters/tag"
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          description: Request accepted
+          schema:
+            $ref: "#/definitions/ScreenshotList"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "403":
+          description: Error
+          schema:
+            $ref: "#/definitions/ScreenshotError"
+        "503":
+          $ref: "#/responses/Unavailable"
+    post:
+      summary: Request multiple screenshots
+      operationId: CreateMultipleScreenshotsPost
+      x-ms-trigger: none
+      description: Supply up to ten repeated url values. By default, all URLs use one set of capture settings.
+        Supply profiles to capture each URL with up to ten settings objects, for at most 100 captures.
+        The response is keyed by screenshot ID.
+      parameters:
+        - name: url
+          in: formData
+          description: URLs of the pages to capture. Repeat the query parameter for multiple URLs.
+          required: true
+          type: array
+          items:
+            type: string
+          collectionFormat: multi
+          maxItems: 10
+        - $ref: "#/parameters/form_browser"
+        - $ref: "#/parameters/form_country"
+        - $ref: "#/parameters/form_screen_width"
+        - $ref: "#/parameters/form_screen_height"
+        - $ref: "#/parameters/form_mobile"
+        - $ref: "#/parameters/form_device"
+        - name: profiles
+          in: formData
+          type: string
+          description: URL-encoded JSON array of one to ten capture settings objects. Each object uses browser,
+            country, screen_width, screen_height, mobile, and device with the same rules and defaults as
+            /screenshot/create. Dimensions and mobile are mutually exclusive with device within each
+            object. When profiles is supplied, omit all six top-level capture settings. Other parameters,
+            including apps, apply to every URL and settings pair.
+          x-decoded-schema:
+            $ref: "#/definitions/CaptureProfiles"
+          x-example: '[{"browser":"chrome","country":"fr","screen_width":1440,"screen_height":900},{"country":"in","device":"iphone_15_pro"}]'
+        - name: size
+          in: formData
+          description: screenshot size - "screen" (default) or "page"
+          type: string
+          enum:
+            - screen
+            - page
+          default: screen
+        - name: cache
+          in: formData
+          description: Reuse a recent capture with the same URL, render settings, and tags within this many seconds. Use 0
+            for a fresh capture. App selections apply to that request, including eligible cached
+            captures.
+          type: integer
+          default: 86400
+        - name: delay
+          in: formData
+          description: number of seconds to wait after the page has loaded. This is used to let JavaScript run
+            longer before taking the screenshot. Use delay=0 to take screenshots faster.
+          type: integer
+          default: 5
+          minimum: 0
+          maximum: 60
+        - name: referer
+          in: formData
+          description: use a custom referrer header
+          type: string
+        - name: post_data
+          in: formData
+          description: send a POST requests with post_data, useful for filling out forms
+          type: string
+        - name: cookie
+          in: formData
+          description: set a cookie for the URL requested (see Custom POST Data, Referer and Cookie) Cookies should
+            be separated by a ;
+          type: string
+        - name: script
+          in: formData
+          description: URL of javascript file to execute after the page load event
+          type: string
+        - name: html
+          in: formData
+          description: saves the HTML of the rendered page which can be retrieved by the API call screenshot/html.
+            This feature costs *1 credit* per screenshot.
+          type: integer
+          minimum: 0
+          maximum: 1
+          default: 0
+        - name: max_wait
+          description: "maximum number of seconds to wait before triggering the PageLoad event. Note that delay
+            will still be used. (default: 0 = disabled)"
+          in: formData
+          type: integer
+          minimum: 0
+          maximum: 60
+          default: 0
+        - name: headers
+          in: formData
+          description: any custom HTTP headers. (Not supported with Internet Explorer)
+          type: string
+        - name: device_scale
+          in: formData
+          description: Pixel density multiplier. Use 2 or 3 for retina output at the same CSS viewport size. Defaults to
+            1. The retina viewport is limited to 20 million physical pixels. Video requires a scale of 1.
+          type: integer
+          enum:
+            - 1
+            - 2
+            - 3
+        - name: hide_ads
+          in: formData
+          description: Block advertising requests and hide matching ad elements. Adds no credits.
+          type: integer
+          enum:
+            - 0
+            - 1
+          default: 0
+        - name: pdf
+          in: formData
+          description: Generate a PDF in addition to the screenshot. Requires a Chrome capture and adds one
+            credit. Use pdf=1 when supplying pdf_* options.
+          type: integer
+          enum:
+            - 0
+            - 1
+          default: 0
+        - name: pdf_format
+          in: formData
+          description: PDF paper size. Ignored when pdf_one_page is enabled. Defaults to letter.
+          type: string
+          enum:
+            - letter
+            - a4
+            - legal
+        - name: pdf_background
+          in: formData
+          description: Include background colors and images in the PDF. Defaults to 0.
+          type: integer
+          enum:
+            - 0
+            - 1
+        - name: pdf_one_page
+          in: formData
+          description: Create one long PDF page using the viewport width and document height. Defaults to 0.
+          type: integer
+          enum:
+            - 0
+            - 1
+        - name: pdf_landscape
+          in: formData
+          description: Use landscape orientation for the PDF. Defaults to 0.
+          type: integer
+          enum:
+            - 0
+            - 1
+        - name: pdf_margin
+          in: formData
+          description: Set all four PDF margins to a nonnegative length. Units can be px, mm, cm, or in. A value
+            without units is in pixels. Defaults to 0px.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_top
+          in: formData
+          description: Override the top PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_bottom
+          in: formData
+          description: Override the bottom PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_left
+          in: formData
+          description: Override the left PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_right
+          in: formData
+          description: Override the right PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: video
+          in: formData
+          description: Record a video or animated GIF in addition to the screenshot. Requires a Chrome capture
+            at device scale 1. Adds one credit per started five seconds. Use video=1 when supplying
+            video_* options.
+          type: integer
+          enum:
+            - 0
+            - 1
+          default: 0
+        - name: video_format
+          in: formData
+          description: Recording format. If MP4 encoding is unavailable, the capture can produce WebM. Defaults to
+            webm.
+          type: string
+          enum:
+            - webm
+            - mp4
+            - gif
+        - name: video_duration
+          in: formData
+          description: Maximum recording duration in seconds. Charges are calculated from the requested duration.
+            Defaults to 15 seconds.
+          type: integer
+          minimum: 1
+          maximum: 30
+        - name: video_quality
+          in: formData
+          description: Recording quality. Lower values mean higher quality. Defaults to 30.
+          type: integer
+          minimum: 0
+          maximum: 63
+        - name: video_fps
+          in: formData
+          description: Target frames per second for WebM and MP4. GIF uses 20 fps and ignores this value. Defaults
+            to 30 for WebM and MP4.
+          type: integer
+          minimum: 1
+          maximum: 30
+        - name: video_scale
+          in: formData
+          description: Multiplier for recorded width and height. Defaults to 1 for WebM and MP4 and 0.5 for GIF.
+          type: number
+          minimum: 0.1
+          maximum: 1
+        - $ref: "#/parameters/form_hide_popups"
+        - $ref: "#/parameters/form_steps"
+        - $ref: "#/parameters/form_trackers"
+        - $ref: "#/parameters/form_apps"
+        - $ref: "#/parameters/form_tag"
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          description: Request accepted
+          schema:
+            $ref: "#/definitions/ScreenshotList"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "403":
+          description: Error
+          schema:
+            $ref: "#/definitions/ScreenshotError"
+        "503":
+          $ref: "#/responses/Unavailable"
+      consumes:
+        - application/x-www-form-urlencoded
+  /screenshot/info:
+    get:
+      summary: Query screenshot status
+      operationId: GetScreenshotInfo
+      description: Once a screenshot has been requested, its status must be checked until it is either "error"
+        or "finished".
+      parameters:
+        - name: id
+          in: query
+          description: Screenshot ID returned when requesting a capture.
+          required: true
+          type: integer
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          description: Screenshot found
+          schema:
+            $ref: "#/definitions/Screenshot"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "404":
+          $ref: "#/responses/NotFound"
+        "503":
+          $ref: "#/responses/Unavailable"
+        default:
+          description: Screenshot not found
+          schema:
+            $ref: "#/definitions/ScreenshotInfoError"
+  /screenshot/list:
+    get:
+      summary: Get information about screenshots
+      operationId: GetMultipleScreenshotsInfo
+      description: Get information about the last 100 screenshots requested.
+      x-ms-visibility: none
+      parameters:
+        - name: limit
+          in: query
+          description: maximum number of screenshots' information to return
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+        - name: status
+          in: query
+          description: get list of screenshot in a given status (error, finished, in_process)
+          type: string
+          enum:
+            - error
+            - finished
+            - in_process
+        - $ref: "#/parameters/tag_filter"
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          description: list of screenshot information
+          schema:
+            $ref: "#/definitions/ScreenshotList"
+        default:
+          description: Screenshot not found
+          schema:
+            $ref: "#/definitions/ScreenshotError"
+  /screenshot/search:
+    get:
+      summary: Search for screenshots
+      operationId: SearchScreenshot
+      description: Search for screenshots of a specific URL.
+      x-ms-visibility: none
+      parameters:
+        - name: url
+          in: query
+          description: look for a string matching the URL requested
+          type: string
+          required: true
+        - name: limit
+          in: query
+          description: maximum number of screenshots' information to return
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+        - name: status
+          in: query
+          description: get list of screenshot in a given status (error, finished, in_process)
+          type: string
+          enum:
+            - error
+            - finished
+            - in_process
+        - $ref: "#/parameters/tag_filter"
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          description: list of screenshot information
+          schema:
+            $ref: "#/definitions/ScreenshotList"
+        default:
+          description: Screenshot not found
+          schema:
+            $ref: "#/definitions/ScreenshotError"
+  /screenshot/thumbnail:
+    get:
+      summary: Retrieve a thumbnail image
+      operationId: GetThumbnail
+      x-ms-trigger: none
+      description: >-
+        Unlike the other API calls, this API sends back the thumbnail as a PNG file, not JSON. The HTTP
+        response code indicates whether the screenshot was successful (200), or incomplete (404) or
+        failed (404). If the screenshot failed or is not finished, a default image "Not found" is sent.
+
+
+        You can crop your screenshots. The crop is done first, then the thumbnail. You can take a
+        1024x768 screenshot, crop it to 768x768, and get it scaled down to 300x300.
+      produces:
+        - image/png
+        - image/jpeg
+      parameters:
+        - name: id
+          in: query
+          description: screenshot ID
+          type: integer
+          required: true
+        - name: width
+          in: query
+          description: width of the thumbnail
+          type: integer
+          minimum: 1
+          maximum: 2000
+        - name: height
+          in: query
+          description: height of the thumbnail
+          type: integer
+          minimum: 1
+          maximum: 15000
+        - name: scale
+          in: query
+          description: Output scale. Without explicit dimensions, defaults to 1 divided by the capture device scale.
+          type: number
+          format: double
+        - name: zoom
+          description: zoom 1 to 100 percent
+          in: query
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+        - name: ratio
+          in: query
+          description: "Use fit to keep the original page ration, and fill to get a thumbnail for the exact width
+            and height.  specified. If you provide both width and height, you need to specify the ratio:
+            fit to keep the original width/height ratio (the thumbnail might be smaller than the
+            specified width and height), or fill to crop the image if necessary."
+          type: string
+          enum:
+            - fit
+            - fill
+          default: fit
+        - name: left
+          in: query
+          description: left edge of the area to be cropped
+          type: integer
+          minimum: 0
+          default: 0
+        - name: right
+          in: query
+          description: right edge of the area to be cropped
+          type: integer
+          minimum: 0
+          default: 0
+        - name: top
+          in: query
+          description: top edge of the area to be cropped
+          type: integer
+          minimum: 0
+          default: 0
+        - name: bottom
+          in: query
+          description: bottom edge of the area to be cropped
+          type: integer
+        - name: format
+          in: query
+          description: image as PNG or JPEG
+          type: string
+          enum:
+            - png
+            - jpeg
+          default: png
+        - name: shot
+          in: query
+          description: get the second or third screenshot if multiple screenshots were requested
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 1
+        - name: quality
+          in: query
+          description: JPEG quality factor (for JPEG thumbnails only)
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          description: thumbnail
+        "404":
+          description: Screenshot not found
+  /screenshot/share:
+    get:
+      summary: Share a screenshot
+      operationId: ShareScreenshot
+      x-ms-trigger: none
+      description: Share a finished screenshot publicly, with an optional note.
+      parameters:
+        - name: id
+          in: query
+          description: screenshot ID
+          type: integer
+          required: true
+        - name: note
+          in: query
+          description: note to add on the sharing page
+          type: string
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          description: Public share URL
+          schema:
+            type: object
+            required:
+              - id
+              - status
+              - url
+            properties:
+              id:
+                type: integer
+                format: int64
+                minimum: 1
+              status:
+                type: string
+                enum:
+                  - ok
+              url:
+                type: string
+        default:
+          description: Screenshot not found
+          schema:
+            $ref: "#/definitions/ScreenshotInfoError"
+  /screenshot/delete:
+    get:
+      summary: Delete screenshot data
+      operationId: DeleteScreenshot
+      x-ms-trigger: none
+      description: You can delete details of your screenshots to remove any confidential information.
+      parameters:
+        - name: id
+          in: query
+          description: screenshot ID
+          type: integer
+          required: true
+        - name: data
+          in: query
+          description: >
+            data to remove. You can specify multiple of them (separated by a ,): *image* (image files),
+            *url* (url requested), *metadata* (time added, time finished, post data, cookie and referer
+            used for the screenshot), *all* (all data and files)
+          type: string
+          default: image
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          description: Requested data deleted
+          schema:
+            type: object
+            required:
+              - id
+              - status
+            properties:
+              id:
+                type: integer
+                format: int64
+                minimum: 1
+              status:
+                type: string
+                enum:
+                  - ok
+        default:
+          description: Screenshot not found
+          schema:
+            $ref: "#/definitions/ScreenshotError"
+  /screenshot/html:
+    get:
+      summary: Get the HTML code
+      operationId: GetHTML
+      description: Retrieve the HTML code of the rendered page. This API call should be used when html=1 was
+        specified in the screenshot request.
+      produces:
+        - text/html
+      parameters:
+        - name: id
+          in: query
+          description: screenshot ID
+          type: integer
+          required: true
+      tags:
+        - Screenshot
+      responses:
+        default:
+          description: HTML code
+  /screenshot/pdf:
+    parameters:
+      - $ref: "#/parameters/ArtifactScreenshotId"
+    get:
+      summary: Download a screenshot PDF
+      operationId: GetScreenshotPDF
+      description: |-
+        Download the PDF from a finished screenshot owned by your account.
+        Enable pdf=1 when creating the capture and wait for screenshot/info to
+        return status=finished. Error responses are JSON.
+      produces:
+        - application/pdf
+        - application/json
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          $ref: "#/responses/PDFDownload"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "404":
+          $ref: "#/responses/NotFound"
+        "503":
+          $ref: "#/responses/Unavailable"
+    post:
+      summary: Download a screenshot PDF
+      operationId: PostScreenshotPDF
+      description: |-
+        Download the PDF from a finished screenshot owned by your account.
+        Enable pdf=1 when creating the capture and wait for screenshot/info to
+        return status=finished. Error responses are JSON.
+      produces:
+        - application/pdf
+        - application/json
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          $ref: "#/responses/PDFDownload"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "404":
+          $ref: "#/responses/NotFound"
+        "503":
+          $ref: "#/responses/Unavailable"
+  /screenshot/video:
+    parameters:
+      - $ref: "#/parameters/ArtifactScreenshotId"
+    get:
+      summary: Download a screenshot video
+      operationId: GetScreenshotVideo
+      description: |-
+        Download the video from a finished screenshot owned by your account.
+        Enable video=1 when creating the capture and wait for screenshot/info to
+        return status=finished. Error responses are JSON.
+      produces:
+        - video/webm
+        - video/mp4
+        - image/gif
+        - application/json
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          $ref: "#/responses/VideoDownload"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "404":
+          $ref: "#/responses/NotFound"
+        "503":
+          $ref: "#/responses/Unavailable"
+    post:
+      summary: Download a screenshot video
+      operationId: PostScreenshotVideo
+      description: |-
+        Download the video from a finished screenshot owned by your account.
+        Enable video=1 when creating the capture and wait for screenshot/info to
+        return status=finished. Error responses are JSON.
+      produces:
+        - video/webm
+        - video/mp4
+        - image/gif
+        - application/json
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          $ref: "#/responses/VideoDownload"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "404":
+          $ref: "#/responses/NotFound"
+        "503":
+          $ref: "#/responses/Unavailable"
+  /batch/create:
+    post:
+      consumes:
+        - multipart/form-data
+      summary: Requests thousands of screenshots at once
+      operationId: CreateBatch
+      x-ms-trigger: none
+      description: Upload a text file with one URL per line as multipart/form-data. All URLs use the same
+        capture settings and apps. The v1 batch ZIP remains available independently of app execution.
+        Failed captures may be retried up to three times.
+      parameters:
+        - name: file
+          in: formData
+          description: text file to use
+          type: file
+          required: true
+        - $ref: "#/parameters/form_browser"
+        - $ref: "#/parameters/form_country"
+        - $ref: "#/parameters/form_screen_width"
+        - $ref: "#/parameters/form_screen_height"
+        - $ref: "#/parameters/form_mobile"
+        - $ref: "#/parameters/form_device"
+        - name: size
+          in: formData
+          description: screenshots size - "screen" (default) or "page"
+          type: string
+          enum:
+            - screen
+            - page
+          default: screen
+        - name: name
+          in: formData
+          description: name of the batch
+          type: string
+        - name: width
+          in: formData
+          description: thumbnail width.
+          type: integer
+          minimum: 1
+          maximum: 2000
+          default: 1024
+        - name: height
+          in: formData
+          description: thumbnail height
+          type: integer
+          minimum: 1
+          maximum: 15000
+        - name: delay
+          in: formData
+          description: number of seconds to wait after the page has loaded. This is used to let JavaScript run
+            longer before taking the screenshot. Use delay=0 to take screenshots faster.
+          type: integer
+          default: 5
+          minimum: 0
+          maximum: 60
+        - name: referer
+          in: formData
+          description: use a custom referrer header
+          type: string
+        - name: post_data
+          in: formData
+          description: send a POST requests with post_data, useful for filling out forms
+          type: string
+        - name: cookie
+          in: formData
+          description: set a cookie for the URL requested (see Custom POST Data, Referer and Cookie) Cookies should
+            be separated by a ;
+          type: string
+        - name: script
+          in: formData
+          description: URL of javascript file to execute after the page load event
+          type: string
+        - name: html
+          in: formData
+          description: saves the HTML of the rendered page which can be retrieved by the API call screenshot/html.
+            This feature costs *1 credit* per screenshot.
+          type: integer
+          minimum: 0
+          maximum: 1
+          default: 0
+        - name: max_wait
+          in: formData
+          description: "maximum number of seconds to wait before triggering the PageLoad event. Note that delay
+            will still be used. (default: 0 = disabled)"
+          type: integer
+          minimum: 0
+          maximum: 60
+          default: 0
+        - name: headers
+          in: formData
+          description: any custom HTTP headers. (Not supported with Internet Explorer)
+          type: string
+        - name: format
+          in: formData
+          description: image as PNG or JPEG
+          type: string
+          enum:
+            - png
+            - jpeg
+          default: png
+        - name: device_scale
+          in: formData
+          description: Pixel density multiplier. Use 2 or 3 for retina output at the same CSS viewport size. Defaults to
+            1. The retina viewport is limited to 20 million physical pixels. Video requires a scale of 1.
+          type: integer
+          enum:
+            - 1
+            - 2
+            - 3
+        - name: hide_ads
+          in: formData
+          description: Block advertising requests and hide matching ad elements. Adds no credits.
+          type: integer
+          enum:
+            - 0
+            - 1
+          default: 0
+        - name: pdf
+          in: formData
+          description: Generate a PDF in addition to the screenshot. Requires a Chrome capture and adds one
+            credit. Use pdf=1 when supplying pdf_* options.
+          type: integer
+          enum:
+            - 0
+            - 1
+          default: 0
+        - name: pdf_format
+          in: formData
+          description: PDF paper size. Ignored when pdf_one_page is enabled. Defaults to letter.
+          type: string
+          enum:
+            - letter
+            - a4
+            - legal
+        - name: pdf_background
+          in: formData
+          description: Include background colors and images in the PDF. Defaults to 0.
+          type: integer
+          enum:
+            - 0
+            - 1
+        - name: pdf_one_page
+          in: formData
+          description: Create one long PDF page using the viewport width and document height. Defaults to 0.
+          type: integer
+          enum:
+            - 0
+            - 1
+        - name: pdf_landscape
+          in: formData
+          description: Use landscape orientation for the PDF. Defaults to 0.
+          type: integer
+          enum:
+            - 0
+            - 1
+        - name: pdf_margin
+          in: formData
+          description: Set all four PDF margins to a nonnegative length. Units can be px, mm, cm, or in. A value
+            without units is in pixels. Defaults to 0px.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_top
+          in: formData
+          description: Override the top PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_bottom
+          in: formData
+          description: Override the bottom PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_left
+          in: formData
+          description: Override the left PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_right
+          in: formData
+          description: Override the right PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: video
+          in: formData
+          description: Record a video or animated GIF in addition to the screenshot. Requires a Chrome capture
+            at device scale 1. Adds one credit per started five seconds. Use video=1 when supplying
+            video_* options.
+          type: integer
+          enum:
+            - 0
+            - 1
+          default: 0
+        - name: video_format
+          in: formData
+          description: Recording format. If MP4 encoding is unavailable, the capture can produce WebM. Defaults to
+            webm.
+          type: string
+          enum:
+            - webm
+            - mp4
+            - gif
+        - name: video_duration
+          in: formData
+          description: Maximum recording duration in seconds. Charges are calculated from the requested duration.
+            Defaults to 15 seconds.
+          type: integer
+          minimum: 1
+          maximum: 30
+        - name: video_quality
+          in: formData
+          description: Recording quality. Lower values mean higher quality. Defaults to 30.
+          type: integer
+          minimum: 0
+          maximum: 63
+        - name: video_fps
+          in: formData
+          description: Target frames per second for WebM and MP4. GIF uses 20 fps and ignores this value. Defaults
+            to 30 for WebM and MP4.
+          type: integer
+          minimum: 1
+          maximum: 30
+        - name: video_scale
+          in: formData
+          description: Multiplier for recorded width and height. Defaults to 1 for WebM and MP4 and 0.5 for GIF.
+          type: number
+          minimum: 0.1
+          maximum: 1
+        - $ref: "#/parameters/form_hide_popups"
+        - $ref: "#/parameters/form_steps"
+        - $ref: "#/parameters/form_trackers"
+        - $ref: "#/parameters/form_apps"
+        - $ref: "#/parameters/form_tag"
+      tags:
+        - Batch
+      responses:
+        "200":
+          description: batch information
+          schema:
+            $ref: "#/definitions/Batch"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "503":
+          $ref: "#/responses/Unavailable"
+        default:
+          description: Batch not created
+          schema:
+            $ref: "#/definitions/BatchError"
+  /batch/info:
+    get:
+      summary: Get the batch status
+      operationId: GetBatchInfo
+      description: Get the status of a batch requested through the API or through the dashboard.
+      parameters:
+        - name: id
+          in: query
+          description: batch ID
+          type: integer
+          required: true
+      tags:
+        - Batch
+      responses:
+        "200":
+          description: batch information
+          schema:
+            $ref: "#/definitions/Batch"
+        default:
+          description: Batch not found
+          schema:
+            $ref: "#/definitions/BatchError"
+  /crawl/create:
+    get:
+      summary: Start a crawl and capture its pages
+      operationId: CreateCrawl
+      description: Crawl a domain starting from a URL. The same capture settings and apps apply to every page
+        found through links on that domain.
+      parameters:
+        - name: domain
+          in: query
+          description: Domain to crawl.
+          type: string
+          maxLength: 255
+          required: true
+        - $ref: "#/parameters/browser"
+        - $ref: "#/parameters/country"
+        - $ref: "#/parameters/screen_width"
+        - $ref: "#/parameters/screen_height"
+        - $ref: "#/parameters/mobile"
+        - $ref: "#/parameters/device"
+        - name: url
+          in: query
+          description: Starting URL. Defaults to the root URL of the domain.
+          type: string
+        - name: max
+          in: query
+          description: Maximum number of pages to crawl.
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 100
+        - name: name
+          in: query
+          description: Name of the crawl.
+          type: string
+        - name: size
+          in: query
+          description: Capture the viewport or the full page.
+          type: string
+          enum:
+            - screen
+            - page
+          default: screen
+        - $ref: "#/parameters/device_scale"
+        - $ref: "#/parameters/hide_ads"
+        - $ref: "#/parameters/pdf"
+        - $ref: "#/parameters/pdf_format"
+        - $ref: "#/parameters/pdf_background"
+        - $ref: "#/parameters/pdf_one_page"
+        - $ref: "#/parameters/pdf_landscape"
+        - $ref: "#/parameters/pdf_margin"
+        - $ref: "#/parameters/pdf_margin_top"
+        - $ref: "#/parameters/pdf_margin_bottom"
+        - $ref: "#/parameters/pdf_margin_left"
+        - $ref: "#/parameters/pdf_margin_right"
+        - $ref: "#/parameters/video"
+        - $ref: "#/parameters/video_format"
+        - $ref: "#/parameters/video_duration"
+        - $ref: "#/parameters/video_quality"
+        - $ref: "#/parameters/video_fps"
+        - $ref: "#/parameters/video_scale"
+        - $ref: "#/parameters/hide_popups"
+        - $ref: "#/parameters/steps"
+        - $ref: "#/parameters/trackers"
+        - $ref: "#/parameters/apps"
+        - $ref: "#/parameters/tag"
+      tags:
+        - Crawl
+      responses:
+        "200":
+          description: Crawl accepted
+          schema:
+            $ref: "#/definitions/Crawl"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "503":
+          $ref: "#/responses/Unavailable"
+    post:
+      summary: Start a crawl and capture its pages
+      operationId: CreateCrawlPost
+      description: Crawl a domain starting from a URL. The same capture settings and apps apply to every page
+        found through links on that domain.
+      parameters:
+        - name: domain
+          in: formData
+          description: Domain to crawl.
+          type: string
+          maxLength: 255
+          required: true
+        - $ref: "#/parameters/form_browser"
+        - $ref: "#/parameters/form_country"
+        - $ref: "#/parameters/form_screen_width"
+        - $ref: "#/parameters/form_screen_height"
+        - $ref: "#/parameters/form_mobile"
+        - $ref: "#/parameters/form_device"
+        - name: url
+          in: formData
+          description: Starting URL. Defaults to the root URL of the domain.
+          type: string
+        - name: max
+          in: formData
+          description: Maximum number of pages to crawl.
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 100
+        - name: name
+          in: formData
+          description: Name of the crawl.
+          type: string
+        - name: size
+          in: formData
+          description: Capture the viewport or the full page.
+          type: string
+          enum:
+            - screen
+            - page
+          default: screen
+        - name: device_scale
+          in: formData
+          description: Pixel density multiplier. Use 2 or 3 for retina output at the same CSS viewport size. Defaults to
+            1. The retina viewport is limited to 20 million physical pixels. Video requires a scale of 1.
+          type: integer
+          enum:
+            - 1
+            - 2
+            - 3
+        - name: hide_ads
+          in: formData
+          description: Block advertising requests and hide matching ad elements. Adds no credits.
+          type: integer
+          enum:
+            - 0
+            - 1
+          default: 0
+        - name: pdf
+          in: formData
+          description: Generate a PDF in addition to the screenshot. Requires a Chrome capture and adds one
+            credit. Use pdf=1 when supplying pdf_* options.
+          type: integer
+          enum:
+            - 0
+            - 1
+          default: 0
+        - name: pdf_format
+          in: formData
+          description: PDF paper size. Ignored when pdf_one_page is enabled. Defaults to letter.
+          type: string
+          enum:
+            - letter
+            - a4
+            - legal
+        - name: pdf_background
+          in: formData
+          description: Include background colors and images in the PDF. Defaults to 0.
+          type: integer
+          enum:
+            - 0
+            - 1
+        - name: pdf_one_page
+          in: formData
+          description: Create one long PDF page using the viewport width and document height. Defaults to 0.
+          type: integer
+          enum:
+            - 0
+            - 1
+        - name: pdf_landscape
+          in: formData
+          description: Use landscape orientation for the PDF. Defaults to 0.
+          type: integer
+          enum:
+            - 0
+            - 1
+        - name: pdf_margin
+          in: formData
+          description: Set all four PDF margins to a nonnegative length. Units can be px, mm, cm, or in. A value
+            without units is in pixels. Defaults to 0px.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_top
+          in: formData
+          description: Override the top PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_bottom
+          in: formData
+          description: Override the bottom PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_left
+          in: formData
+          description: Override the left PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_right
+          in: formData
+          description: Override the right PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: video
+          in: formData
+          description: Record a video or animated GIF in addition to the screenshot. Requires a Chrome capture
+            at device scale 1. Adds one credit per started five seconds. Use video=1 when supplying
+            video_* options.
+          type: integer
+          enum:
+            - 0
+            - 1
+          default: 0
+        - name: video_format
+          in: formData
+          description: Recording format. If MP4 encoding is unavailable, the capture can produce WebM. Defaults to
+            webm.
+          type: string
+          enum:
+            - webm
+            - mp4
+            - gif
+        - name: video_duration
+          in: formData
+          description: Maximum recording duration in seconds. Charges are calculated from the requested duration.
+            Defaults to 15 seconds.
+          type: integer
+          minimum: 1
+          maximum: 30
+        - name: video_quality
+          in: formData
+          description: Recording quality. Lower values mean higher quality. Defaults to 30.
+          type: integer
+          minimum: 0
+          maximum: 63
+        - name: video_fps
+          in: formData
+          description: Target frames per second for WebM and MP4. GIF uses 20 fps and ignores this value. Defaults
+            to 30 for WebM and MP4.
+          type: integer
+          minimum: 1
+          maximum: 30
+        - name: video_scale
+          in: formData
+          description: Multiplier for recorded width and height. Defaults to 1 for WebM and MP4 and 0.5 for GIF.
+          type: number
+          minimum: 0.1
+          maximum: 1
+        - $ref: "#/parameters/form_hide_popups"
+        - $ref: "#/parameters/form_steps"
+        - $ref: "#/parameters/form_trackers"
+        - $ref: "#/parameters/form_apps"
+        - $ref: "#/parameters/form_tag"
+      tags:
+        - Crawl
+      responses:
+        "200":
+          description: Crawl accepted
+          schema:
+            $ref: "#/definitions/Crawl"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "503":
+          $ref: "#/responses/Unavailable"
+      consumes:
+        - application/x-www-form-urlencoded
+  /crawl/info:
+    get:
+      summary: Get crawl status and screenshots
+      operationId: GetCrawlInfo
+      parameters:
+        - name: id
+          in: query
+          description: Crawl ID returned by /crawl/create.
+          type: integer
+          format: int64
+          minimum: 1
+          required: true
+      tags:
+        - Crawl
+      responses:
+        "200":
+          description: Crawl status and screenshot details
+          schema:
+            $ref: "#/definitions/Crawl"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "404":
+          $ref: "#/responses/NotFound"
+        "503":
+          $ref: "#/responses/Unavailable"
+  /account/info:
+    get:
+      summary: Get information about your account
+      operationId: GetAccountInfo
+      description: Get account status and credit balances.
+      x-ms-trigger: single
+      tags:
+        - Account
+      responses:
+        "200":
+          description: Account information
+          schema:
+            $ref: "#/definitions/Account"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        default:
+          description: Account not found
+          schema:
+            $ref: "#/definitions/AccountError"
+  /browser/info:
+    get:
+      summary: Get information about a browser
+      operationId: GetBrowserInfo
+      description: Look up a capture browser by its engine name or its existing numeric browser ID. Supply
+        exactly one of browser or id.
+      x-ms-visibility: none
+      parameters:
+        - name: id
+          in: query
+          description: browser ID
+          type: integer
+        - name: browser
+          in: query
+          type: string
+          enum:
+            - chrome
+            - firefox
+      tags:
+        - Browser
+      responses:
+        "200":
+          description: Browser information
+          schema:
+            $ref: "#/definitions/Browser"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        default:
+          description: Browser not found
+          schema:
+            $ref: "#/definitions/BrowserError"
+  /browser/list:
+    get:
+      summary: Get all browsers
+      operationId: GetBrowsersInfo
+      description: List available capture browsers in the existing browser-ID-keyed format.
+      x-ms-visibility: none
+      tags:
+        - Browser
+      responses:
+        "200":
+          description: Browser definitions
+          schema:
+            $ref: "#/definitions/BrowserList"
+        default:
+          description: Account not found
+          schema:
+            $ref: "#/definitions/BrowserError"
+  /device/list:
+    get:
+      summary: List named capture devices
+      operationId: ListDevices
+      tags:
+        - Device
+      responses:
+        "200":
+          description: Available device presets
+          schema:
+            type: object
+            required:
+              - devices
+            properties:
+              devices:
+                type: array
+                items:
+                  $ref: "#/definitions/Device"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "503":
+          $ref: "#/responses/Unavailable"
+  /simple:
+    get:
+      operationId: CreateSimpleScreenshot
+      summary: Capture and return an image
+      tags:
+        - Screenshot
+      description: Accepts the same capture parameters as /screenshot/create, plus thumbnail options. When
+        capture is pending, follow the same-host continuation URL until the image is ready.
+      produces:
+        - image/png
+        - image/jpeg
+        - image/webp
+      responses:
+        "200":
+          description: Requested screenshot or thumbnail
+          schema:
+            type: string
+            format: binary
+        "302":
+          description: Capture is pending. Follow Location and preserve header authentication if used.
+          headers:
+            Location:
+              type: string
+              description: Same-host continuation targeting the v2 Simple API.
+            Retry-After:
+              type: integer
+              description: Seconds before the next check.
+        "400":
+          description: PNG error image
+          schema:
+            type: string
+            format: binary
+          headers:
+            X-Error:
+              type: string
+        "404":
+          description: PNG error image
+          schema:
+            type: string
+            format: binary
+          headers:
+            X-Error:
+              type: string
+        "503":
+          description: PNG error image
+          schema:
+            type: string
+            format: binary
+          headers:
+            X-Error:
+              type: string
+      parameters:
+        - name: url
+          in: query
+          description: URL of the page to get a screenshot for
+          required: true
+          type: string
+        - $ref: "#/parameters/browser"
+        - $ref: "#/parameters/country"
+        - $ref: "#/parameters/screen_width"
+        - $ref: "#/parameters/screen_height"
+        - $ref: "#/parameters/mobile"
+        - $ref: "#/parameters/device"
+        - name: size
+          in: query
+          description: screenshot size - "screen" (default) or "page"
+          type: string
+          enum:
+            - screen
+            - page
+          default: screen
+        - name: cache
+          in: query
+          description: Reuse a recent capture with the same URL, render settings, and tags within this many seconds. Use 0
+            for a fresh capture. App selections apply to that request, including eligible cached
+            captures.
+          type: integer
+          default: 86400
+        - name: delay
+          in: query
+          description: number of seconds to wait after the page has loaded. This is used to let JavaScript run
+            longer before taking the screenshot. Use delay=0 to take screenshots faster.
+          type: integer
+          default: 5
+          minimum: 0
+          maximum: 60
+        - name: referer
+          in: query
+          description: use a custom referrer header
+          type: string
+        - name: post_data
+          in: query
+          description: send a POST requests with post_data, useful for filling out forms
+          type: string
+        - name: cookie
+          in: query
+          description: set a cookie for the URL requested (see Custom POST Data, Referer and Cookie) Cookies should
+            be separated by a ;
+          type: string
+        - name: script
+          in: query
+          description: URL of javascript file to execute after the page load event
+          type: string
+        - name: html
+          in: query
+          description: saves the HTML of the rendered page which can be retrieved by the API call screenshot/html.
+            This feature costs *1 credit* per screenshot.
+          type: integer
+          minimum: 0
+          maximum: 1
+          default: 0
+        - name: max_wait
+          description: "maximum number of seconds to wait before triggering the PageLoad event. Note that delay
+            will still be used. (default: 0 = disabled)"
+          in: query
+          type: integer
+          minimum: 0
+          maximum: 60
+          default: 0
+        - name: headers
+          in: query
+          description: any custom HTTP headers. (Not supported with Internet Explorer)
+          type: string
+        - name: shots
+          in: query
+          description: Take multiple screenshots of the same page. Each additional shot costs one credit.
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 1
+        - name: shot_interval
+          in: query
+          description: number of seconds between 2 screenshots
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+        - $ref: "#/parameters/device_scale"
+        - $ref: "#/parameters/hide_ads"
+        - $ref: "#/parameters/pdf"
+        - $ref: "#/parameters/pdf_format"
+        - $ref: "#/parameters/pdf_background"
+        - $ref: "#/parameters/pdf_one_page"
+        - $ref: "#/parameters/pdf_landscape"
+        - $ref: "#/parameters/pdf_margin"
+        - $ref: "#/parameters/pdf_margin_top"
+        - $ref: "#/parameters/pdf_margin_bottom"
+        - $ref: "#/parameters/pdf_margin_left"
+        - $ref: "#/parameters/pdf_margin_right"
+        - $ref: "#/parameters/video"
+        - $ref: "#/parameters/video_format"
+        - $ref: "#/parameters/video_duration"
+        - $ref: "#/parameters/video_quality"
+        - $ref: "#/parameters/video_fps"
+        - $ref: "#/parameters/video_scale"
+        - $ref: "#/parameters/hide_popups"
+        - $ref: "#/parameters/steps"
+        - $ref: "#/parameters/trackers"
+        - $ref: "#/parameters/apps"
+        - $ref: "#/parameters/tag"
+        - name: width
+          in: query
+          description: Thumbnail width in pixels. Use 0 or omit to keep the original dimension.
+          type: integer
+          minimum: 0
+          maximum: 2000
+        - name: height
+          in: query
+          description: Thumbnail height in pixels. Use 0 or omit to keep the original dimension.
+          type: integer
+          minimum: 0
+          maximum: 15000
+        - name: scale
+          in: query
+          description: Output scale. Without explicit dimensions, defaults to 1 divided by the capture device scale.
+          type: number
+          format: double
+        - name: zoom
+          description: zoom 1 to 100 percent
+          in: query
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+        - name: ratio
+          in: query
+          description: "Use fit to keep the original page ration, and fill to get a thumbnail for the exact width
+            and height.  specified. If you provide both width and height, you need to specify the ratio:
+            fit to keep the original width/height ratio (the thumbnail might be smaller than the
+            specified width and height), or fill to crop the image if necessary."
+          type: string
+          enum:
+            - fit
+            - fill
+          default: fit
+        - name: left
+          in: query
+          description: left edge of the area to be cropped
+          type: integer
+          minimum: 0
+          default: 0
+        - name: right
+          in: query
+          description: right edge of the area to be cropped
+          type: integer
+          minimum: 0
+          default: 0
+        - name: top
+          in: query
+          description: top edge of the area to be cropped
+          type: integer
+          minimum: 0
+          default: 0
+        - name: bottom
+          in: query
+          description: bottom edge of the area to be cropped
+          type: integer
+        - name: format
+          in: query
+          description: image as PNG or JPEG
+          type: string
+          enum:
+            - png
+            - jpeg
+          default: png
+        - name: shot
+          in: query
+          description: get the second or third screenshot if multiple screenshots were requested
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 1
+        - name: quality
+          in: query
+          description: JPEG quality factor (for JPEG thumbnails only)
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+    post:
+      operationId: CreateSimpleScreenshotPost
+      summary: Capture and return an image
+      tags:
+        - Screenshot
+      description: Accepts the same capture parameters as /screenshot/create, plus thumbnail options. When
+        capture is pending, follow the same-host continuation URL until the image is ready.
+      produces:
+        - image/png
+        - image/jpeg
+        - image/webp
+      responses:
+        "200":
+          description: Requested screenshot or thumbnail
+          schema:
+            type: string
+            format: binary
+        "302":
+          description: Capture is pending. Follow Location and preserve header authentication if used.
+          headers:
+            Location:
+              type: string
+              description: Same-host continuation targeting the v2 Simple API.
+            Retry-After:
+              type: integer
+              description: Seconds before the next check.
+        "400":
+          description: PNG error image
+          schema:
+            type: string
+            format: binary
+          headers:
+            X-Error:
+              type: string
+        "404":
+          description: PNG error image
+          schema:
+            type: string
+            format: binary
+          headers:
+            X-Error:
+              type: string
+        "503":
+          description: PNG error image
+          schema:
+            type: string
+            format: binary
+          headers:
+            X-Error:
+              type: string
+      parameters:
+        - name: url
+          in: formData
+          description: URL of the page to get a screenshot for
+          required: true
+          type: string
+        - $ref: "#/parameters/form_browser"
+        - $ref: "#/parameters/form_country"
+        - $ref: "#/parameters/form_screen_width"
+        - $ref: "#/parameters/form_screen_height"
+        - $ref: "#/parameters/form_mobile"
+        - $ref: "#/parameters/form_device"
+        - name: size
+          in: formData
+          description: screenshot size - "screen" (default) or "page"
+          type: string
+          enum:
+            - screen
+            - page
+          default: screen
+        - name: cache
+          in: formData
+          description: Reuse a recent capture with the same URL, render settings, and tags within this many seconds. Use 0
+            for a fresh capture. App selections apply to that request, including eligible cached
+            captures.
+          type: integer
+          default: 86400
+        - name: delay
+          in: formData
+          description: number of seconds to wait after the page has loaded. This is used to let JavaScript run
+            longer before taking the screenshot. Use delay=0 to take screenshots faster.
+          type: integer
+          default: 5
+          minimum: 0
+          maximum: 60
+        - name: referer
+          in: formData
+          description: use a custom referrer header
+          type: string
+        - name: post_data
+          in: formData
+          description: send a POST requests with post_data, useful for filling out forms
+          type: string
+        - name: cookie
+          in: formData
+          description: set a cookie for the URL requested (see Custom POST Data, Referer and Cookie) Cookies should
+            be separated by a ;
+          type: string
+        - name: script
+          in: formData
+          description: URL of javascript file to execute after the page load event
+          type: string
+        - name: html
+          in: formData
+          description: saves the HTML of the rendered page which can be retrieved by the API call screenshot/html.
+            This feature costs *1 credit* per screenshot.
+          type: integer
+          minimum: 0
+          maximum: 1
+          default: 0
+        - name: max_wait
+          description: "maximum number of seconds to wait before triggering the PageLoad event. Note that delay
+            will still be used. (default: 0 = disabled)"
+          in: formData
+          type: integer
+          minimum: 0
+          maximum: 60
+          default: 0
+        - name: headers
+          in: formData
+          description: any custom HTTP headers. (Not supported with Internet Explorer)
+          type: string
+        - name: shots
+          in: formData
+          description: Take multiple screenshots of the same page. Each additional shot costs one credit.
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 1
+        - name: shot_interval
+          in: formData
+          description: number of seconds between 2 screenshots
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+        - name: device_scale
+          in: formData
+          description: Pixel density multiplier. Use 2 or 3 for retina output at the same CSS viewport size. Defaults to
+            1. The retina viewport is limited to 20 million physical pixels. Video requires a scale of 1.
+          type: integer
+          enum:
+            - 1
+            - 2
+            - 3
+        - name: hide_ads
+          in: formData
+          description: Block advertising requests and hide matching ad elements. Adds no credits.
+          type: integer
+          enum:
+            - 0
+            - 1
+          default: 0
+        - name: pdf
+          in: formData
+          description: Generate a PDF in addition to the screenshot. Requires a Chrome capture and adds one
+            credit. Use pdf=1 when supplying pdf_* options.
+          type: integer
+          enum:
+            - 0
+            - 1
+          default: 0
+        - name: pdf_format
+          in: formData
+          description: PDF paper size. Ignored when pdf_one_page is enabled. Defaults to letter.
+          type: string
+          enum:
+            - letter
+            - a4
+            - legal
+        - name: pdf_background
+          in: formData
+          description: Include background colors and images in the PDF. Defaults to 0.
+          type: integer
+          enum:
+            - 0
+            - 1
+        - name: pdf_one_page
+          in: formData
+          description: Create one long PDF page using the viewport width and document height. Defaults to 0.
+          type: integer
+          enum:
+            - 0
+            - 1
+        - name: pdf_landscape
+          in: formData
+          description: Use landscape orientation for the PDF. Defaults to 0.
+          type: integer
+          enum:
+            - 0
+            - 1
+        - name: pdf_margin
+          in: formData
+          description: Set all four PDF margins to a nonnegative length. Units can be px, mm, cm, or in. A value
+            without units is in pixels. Defaults to 0px.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_top
+          in: formData
+          description: Override the top PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_bottom
+          in: formData
+          description: Override the bottom PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_left
+          in: formData
+          description: Override the left PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: pdf_margin_right
+          in: formData
+          description: Override the right PDF margin. Defaults to pdf_margin.
+          type: string
+          pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+          maxLength: 32
+        - name: video
+          in: formData
+          description: Record a video or animated GIF in addition to the screenshot. Requires a Chrome capture
+            at device scale 1. Adds one credit per started five seconds. Use video=1 when supplying
+            video_* options.
+          type: integer
+          enum:
+            - 0
+            - 1
+          default: 0
+        - name: video_format
+          in: formData
+          description: Recording format. If MP4 encoding is unavailable, the capture can produce WebM. Defaults to
+            webm.
+          type: string
+          enum:
+            - webm
+            - mp4
+            - gif
+        - name: video_duration
+          in: formData
+          description: Maximum recording duration in seconds. Charges are calculated from the requested duration.
+            Defaults to 15 seconds.
+          type: integer
+          minimum: 1
+          maximum: 30
+        - name: video_quality
+          in: formData
+          description: Recording quality. Lower values mean higher quality. Defaults to 30.
+          type: integer
+          minimum: 0
+          maximum: 63
+        - name: video_fps
+          in: formData
+          description: Target frames per second for WebM and MP4. GIF uses 20 fps and ignores this value. Defaults
+            to 30 for WebM and MP4.
+          type: integer
+          minimum: 1
+          maximum: 30
+        - name: video_scale
+          in: formData
+          description: Multiplier for recorded width and height. Defaults to 1 for WebM and MP4 and 0.5 for GIF.
+          type: number
+          minimum: 0.1
+          maximum: 1
+        - $ref: "#/parameters/form_hide_popups"
+        - $ref: "#/parameters/form_steps"
+        - $ref: "#/parameters/form_trackers"
+        - $ref: "#/parameters/form_apps"
+        - $ref: "#/parameters/form_tag"
+        - name: width
+          in: formData
+          description: Thumbnail width in pixels. Use 0 or omit to keep the original dimension.
+          type: integer
+          minimum: 0
+          maximum: 2000
+        - name: height
+          in: formData
+          description: Thumbnail height in pixels. Use 0 or omit to keep the original dimension.
+          type: integer
+          minimum: 0
+          maximum: 15000
+        - name: scale
+          in: formData
+          description: Output scale. Without explicit dimensions, defaults to 1 divided by the capture device scale.
+          type: number
+          format: double
+        - name: zoom
+          description: zoom 1 to 100 percent
+          in: formData
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+        - name: ratio
+          in: formData
+          description: "Use fit to keep the original page ration, and fill to get a thumbnail for the exact width
+            and height.  specified. If you provide both width and height, you need to specify the ratio:
+            fit to keep the original width/height ratio (the thumbnail might be smaller than the
+            specified width and height), or fill to crop the image if necessary."
+          type: string
+          enum:
+            - fit
+            - fill
+          default: fit
+        - name: left
+          in: formData
+          description: left edge of the area to be cropped
+          type: integer
+          minimum: 0
+          default: 0
+        - name: right
+          in: formData
+          description: right edge of the area to be cropped
+          type: integer
+          minimum: 0
+          default: 0
+        - name: top
+          in: formData
+          description: top edge of the area to be cropped
+          type: integer
+          minimum: 0
+          default: 0
+        - name: bottom
+          in: formData
+          description: bottom edge of the area to be cropped
+          type: integer
+        - name: format
+          in: formData
+          description: image as PNG or JPEG
+          type: string
+          enum:
+            - png
+            - jpeg
+          default: png
+        - name: shot
+          in: formData
+          description: get the second or third screenshot if multiple screenshots were requested
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 1
+        - name: quality
+          in: formData
+          description: JPEG quality factor (for JPEG thumbnails only)
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+      consumes:
+        - application/x-www-form-urlencoded
+  /simple/{id}:
+    get:
+      operationId: ResumeSimpleScreenshot
+      summary: Resume a Simple API capture
+      tags:
+        - Screenshot
+      description: Returns the image or a further continuation for an existing owned capture.
+      produces:
+        - image/png
+        - image/jpeg
+        - image/webp
+      responses:
+        "200":
+          description: Requested screenshot or thumbnail
+          schema:
+            type: string
+            format: binary
+        "302":
+          description: Capture is pending. Follow Location and preserve header authentication if used.
+          headers:
+            Location:
+              type: string
+              description: Same-host continuation targeting the v2 Simple API.
+            Retry-After:
+              type: integer
+              description: Seconds before the next check.
+        "400":
+          description: PNG error image
+          schema:
+            type: string
+            format: binary
+          headers:
+            X-Error:
+              type: string
+        "404":
+          description: PNG error image
+          schema:
+            type: string
+            format: binary
+          headers:
+            X-Error:
+              type: string
+        "503":
+          description: PNG error image
+          schema:
+            type: string
+            format: binary
+          headers:
+            X-Error:
+              type: string
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: integer
+          format: int64
+          minimum: 1
+        - name: width
+          in: query
+          description: Thumbnail width in pixels. Use 0 or omit to keep the original dimension.
+          type: integer
+          minimum: 0
+          maximum: 2000
+        - name: height
+          in: query
+          description: Thumbnail height in pixels. Use 0 or omit to keep the original dimension.
+          type: integer
+          minimum: 0
+          maximum: 15000
+        - name: scale
+          in: query
+          description: Output scale. Without explicit dimensions, defaults to 1 divided by the capture device scale.
+          type: number
+          format: double
+        - name: zoom
+          description: zoom 1 to 100 percent
+          in: query
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+        - name: ratio
+          in: query
+          description: "Use fit to keep the original page ration, and fill to get a thumbnail for the exact width
+            and height.  specified. If you provide both width and height, you need to specify the ratio:
+            fit to keep the original width/height ratio (the thumbnail might be smaller than the
+            specified width and height), or fill to crop the image if necessary."
+          type: string
+          enum:
+            - fit
+            - fill
+          default: fit
+        - name: left
+          in: query
+          description: left edge of the area to be cropped
+          type: integer
+          minimum: 0
+          default: 0
+        - name: right
+          in: query
+          description: right edge of the area to be cropped
+          type: integer
+          minimum: 0
+          default: 0
+        - name: top
+          in: query
+          description: top edge of the area to be cropped
+          type: integer
+          minimum: 0
+          default: 0
+        - name: bottom
+          in: query
+          description: bottom edge of the area to be cropped
+          type: integer
+        - name: format
+          in: query
+          description: image as PNG or JPEG
+          type: string
+          enum:
+            - png
+            - jpeg
+          default: png
+        - name: shot
+          in: query
+          description: get the second or third screenshot if multiple screenshots were requested
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 1
+        - name: quality
+          in: query
+          description: JPEG quality factor (for JPEG thumbnails only)
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+        - name: shots
+          in: query
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: Existing continuation shot count.
+        - name: t
+          in: query
+          type: integer
+          minimum: 0
+          description: Server-provided continuation attempt.
+    post:
+      operationId: ResumeSimpleScreenshotPost
+      summary: Resume a Simple API capture
+      tags:
+        - Screenshot
+      description: Returns the image or a further continuation for an existing owned capture.
+      produces:
+        - image/png
+        - image/jpeg
+        - image/webp
+      responses:
+        "200":
+          description: Requested screenshot or thumbnail
+          schema:
+            type: string
+            format: binary
+        "302":
+          description: Capture is pending. Follow Location and preserve header authentication if used.
+          headers:
+            Location:
+              type: string
+              description: Same-host continuation targeting the v2 Simple API.
+            Retry-After:
+              type: integer
+              description: Seconds before the next check.
+        "400":
+          description: PNG error image
+          schema:
+            type: string
+            format: binary
+          headers:
+            X-Error:
+              type: string
+        "404":
+          description: PNG error image
+          schema:
+            type: string
+            format: binary
+          headers:
+            X-Error:
+              type: string
+        "503":
+          description: PNG error image
+          schema:
+            type: string
+            format: binary
+          headers:
+            X-Error:
+              type: string
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: integer
+          format: int64
+          minimum: 1
+        - name: width
+          in: formData
+          description: Thumbnail width in pixels. Use 0 or omit to keep the original dimension.
+          type: integer
+          minimum: 0
+          maximum: 2000
+        - name: height
+          in: formData
+          description: Thumbnail height in pixels. Use 0 or omit to keep the original dimension.
+          type: integer
+          minimum: 0
+          maximum: 15000
+        - name: scale
+          in: formData
+          description: Output scale. Without explicit dimensions, defaults to 1 divided by the capture device scale.
+          type: number
+          format: double
+        - name: zoom
+          description: zoom 1 to 100 percent
+          in: formData
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+        - name: ratio
+          in: formData
+          description: "Use fit to keep the original page ration, and fill to get a thumbnail for the exact width
+            and height.  specified. If you provide both width and height, you need to specify the ratio:
+            fit to keep the original width/height ratio (the thumbnail might be smaller than the
+            specified width and height), or fill to crop the image if necessary."
+          type: string
+          enum:
+            - fit
+            - fill
+          default: fit
+        - name: left
+          in: formData
+          description: left edge of the area to be cropped
+          type: integer
+          minimum: 0
+          default: 0
+        - name: right
+          in: formData
+          description: right edge of the area to be cropped
+          type: integer
+          minimum: 0
+          default: 0
+        - name: top
+          in: formData
+          description: top edge of the area to be cropped
+          type: integer
+          minimum: 0
+          default: 0
+        - name: bottom
+          in: formData
+          description: bottom edge of the area to be cropped
+          type: integer
+        - name: format
+          in: formData
+          description: image as PNG or JPEG
+          type: string
+          enum:
+            - png
+            - jpeg
+          default: png
+        - name: shot
+          in: formData
+          description: get the second or third screenshot if multiple screenshots were requested
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 1
+        - name: quality
+          in: formData
+          description: JPEG quality factor (for JPEG thumbnails only)
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+        - name: shots
+          in: formData
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: Existing continuation shot count.
+        - name: t
+          in: formData
+          type: integer
+          minimum: 0
+          description: Server-provided continuation attempt.
+      consumes:
+        - application/x-www-form-urlencoded
+  /wait:
+    get:
+      operationId: WaitForSimpleScreenshot
+      summary: Follow a Simple API wait continuation
+      tags:
+        - Screenshot
+      parameters:
+        - name: r
+          in: query
+          required: true
+          type: string
+          description: The relative v2 Simple API target from a previous redirect.
+        - name: s
+          in: query
+          type: integer
+          minimum: 0
+          maximum: 240
+        - name: t
+          in: query
+          type: integer
+          minimum: 0
+          maximum: 100000
+      produces:
+        - image/png
+      responses:
+        "302":
+          description: Continue polling the same capture.
+          headers:
+            Location:
+              type: string
+        "400":
+          description: PNG error image
+          schema:
+            type: string
+            format: binary
+        "503":
+          description: PNG error image
+          schema:
+            type: string
+            format: binary
+  /batch/download:
+    get:
+      operationId: DownloadBatch
+      summary: Download a finished batch ZIP
+      tags:
+        - Batch
+      produces:
+        - application/octet-stream
+        - application/json
+      parameters:
+        - name: id
+          in: query
+          required: true
+          type: integer
+          format: int64
+          minimum: 1
+          description: Batch ID from /batch/create or /batch/info.
+      responses:
+        "200":
+          description: Batch ZIP attachment
+          schema:
+            type: string
+            format: binary
+          headers:
+            Content-Disposition:
+              type: string
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "404":
+          $ref: "#/responses/NotFound"
+        "503":
+          $ref: "#/responses/Unavailable"
+  /ping:
+    get:
+      operationId: Ping
+      summary: Check API availability
+      security: []
+      description: Returns plain text OK. If supplied, the customer key is validated.
+      produces:
+        - text/plain
+        - application/json
+      parameters:
+        - name: key
+          in: query
+          type: string
+        - name: X-API-KEY
+          in: header
+          type: string
+      responses:
+        "200":
+          description: API is available
+          schema:
+            type: string
+            enum:
+              - OK
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "503":
+          $ref: "#/responses/Unavailable"
+  /app/list:
+    get:
+      operationId: ListApps
+      summary: List configured apps
+      tags:
+        - App
+      responses:
+        "200":
+          description: Apps owned by the authenticated account
+          schema:
+            type: object
+            required:
+              - apps
+            properties:
+              apps:
+                type: array
+                items:
+                  $ref: "#/definitions/App"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "503":
+          $ref: "#/responses/Unavailable"
+  /app/info:
+    get:
+      operationId: GetAppInfo
+      summary: Get app configuration
+      tags:
+        - App
+      parameters:
+        - name: id
+          in: query
+          required: true
+          type: integer
+          format: int64
+          minimum: 1
+          description: Numeric app configuration ID returned by /app/list or /app/create.
+      responses:
+        "200":
+          description: App configuration with sensitive fields omitted
+          schema:
+            $ref: "#/definitions/App"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "404":
+          $ref: "#/responses/NotFound"
+        "503":
+          $ref: "#/responses/Unavailable"
+  /app/create:
+    post:
+      operationId: CreateApp
+      summary: Create an S3 or webhook app
+      tags:
+        - App
+      description: Save a reusable app configuration under an account-owned app_id. Webhook apps POST the
+        WebhookDelivery body when captures finish or fail. S3 apps upload screenshot images after
+        successful captures.
+      consumes:
+        - application/json
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/CreateApp"
+      responses:
+        "200":
+          description: Created app
+          schema:
+            $ref: "#/definitions/App"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "404":
+          $ref: "#/responses/NotFound"
+        "409":
+          $ref: "#/responses/Conflict"
+        "503":
+          $ref: "#/responses/Unavailable"
+  /app/update:
+    post:
+      operationId: UpdateApp
+      summary: Update an app
+      tags:
+        - App
+      description: Update fields of an owned app. A supplied config replaces the previous config. Omit config
+        for metadata-only updates. The app type is fixed.
+      consumes:
+        - application/json
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/UpdateApp"
+      responses:
+        "200":
+          description: Updated app
+          schema:
+            $ref: "#/definitions/App"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "404":
+          $ref: "#/responses/NotFound"
+        "409":
+          $ref: "#/responses/Conflict"
+        "503":
+          $ref: "#/responses/Unavailable"
+  /app/delete:
+    post:
+      operationId: DeleteApp
+      summary: Delete an app
+      tags:
+        - App
+      description: Remove an owned app from future capture requests. Previous deliveries and uploaded objects
+        remain available according to destination retention.
+      consumes:
+        - application/json
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/AppId"
+      responses:
+        "200":
+          description: Deleted app
+          schema:
+            type: object
+            required:
+              - id
+              - status
+            properties:
+              id:
+                type: integer
+                format: int64
+                minimum: 1
+              status:
+                type: string
+                enum:
+                  - ok
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "404":
+          $ref: "#/responses/NotFound"
+        "503":
+          $ref: "#/responses/Unavailable"
+  /app/test:
+    post:
+      operationId: TestApp
+      summary: Queue an app connectivity test
+      tags:
+        - App
+      description: Queue a test delivery to the owned app destination. For S3, this writes browshot-test.txt in the bucket. Read the result with /app/info.
+      consumes:
+        - application/json
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/AppId"
+      responses:
+        "200":
+          description: Test queued
+          schema:
+            type: object
+            required:
+              - id
+              - status
+            properties:
+              id:
+                type: integer
+                format: int64
+                minimum: 1
+              status:
+                type: string
+                enum:
+                  - processing
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "404":
+          $ref: "#/responses/NotFound"
+        "503":
+          $ref: "#/responses/Unavailable"
+  /app/run:
+    post:
+      operationId: RunScreenshotApps
+      summary: Run apps for an existing screenshot
+      tags:
+        - App
+      description: Queue configured apps for an owned finished screenshot. Use /screenshot/info to read
+        delivery results. An app failure is reported separately from capture status.
+      consumes:
+        - application/json
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/RunApps"
+      responses:
+        "200":
+          description: Apps accepted
+          schema:
+            type: object
+            required:
+              - id
+              - apps
+            properties:
+              id:
+                type: integer
+                format: int64
+                minimum: 1
+              apps:
+                type: array
+                items:
+                  $ref: "#/definitions/AppStatus"
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "404":
+          $ref: "#/responses/NotFound"
+        "409":
+          $ref: "#/responses/Conflict"
+        "503":
+          $ref: "#/responses/Unavailable"
+  /screenshot/list/slow:
+    get:
+      summary: List screenshots with the legacy slow-list operation
+      operationId: ListScreenshotsSlow
+      description: Return screenshots owned by the caller, keyed by screenshot ID.
+      x-ms-visibility: none
+      parameters:
+        - name: limit
+          in: query
+          description: maximum number of screenshots' information to return
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+        - name: status
+          in: query
+          description: get list of screenshot in a given status (error, finished, in_process)
+          type: string
+          enum:
+            - error
+            - finished
+            - in_process
+        - $ref: "#/parameters/tag_filter"
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          description: list of screenshot information
+          schema:
+            $ref: "#/definitions/ScreenshotList"
+        default:
+          description: Screenshot not found
+          schema:
+            $ref: "#/definitions/ScreenshotError"
+  /tag/list:
+    get:
+      summary: List screenshot tags
+      operationId: ListScreenshotTags
+      description: Return the distinct tags on screenshots owned by the caller.
+      tags:
+        - Screenshot
+      responses:
+        "200":
+          description: Screenshot tags in alphabetical order
+          schema:
+            type: object
+            required: [tags]
+            properties:
+              tags:
+                type: array
+                items:
+                  type: string
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "503":
+          $ref: "#/responses/Unavailable"
+parameters:
+  ArtifactScreenshotId:
+    name: id
+    in: query
+    description: Screenshot ID returned by /screenshot/create or /screenshot/info.
+    required: true
+    type: integer
+    format: int64
+    minimum: 1
+  device_scale:
+    name: device_scale
+    in: query
+    description: Pixel density multiplier. Use 2 or 3 for retina output at the same CSS viewport size. Defaults to
+      1. The retina viewport is limited to 20 million physical pixels. Video requires a scale of 1.
+    type: integer
+    enum:
+      - 1
+      - 2
+      - 3
+  hide_ads:
+    name: hide_ads
+    in: query
+    description: Block advertising requests and hide matching ad elements. Adds no credits.
+    type: integer
+    enum:
+      - 0
+      - 1
+    default: 0
+  pdf:
+    name: pdf
+    in: query
+    description: Generate a PDF in addition to the screenshot. Requires a Chrome capture and adds one
+      credit. Use pdf=1 when supplying pdf_* options.
+    type: integer
+    enum:
+      - 0
+      - 1
+    default: 0
+  pdf_format:
+    name: pdf_format
+    in: query
+    description: PDF paper size. Ignored when pdf_one_page is enabled. Defaults to letter.
+    type: string
+    enum:
+      - letter
+      - a4
+      - legal
+  pdf_background:
+    name: pdf_background
+    in: query
+    description: Include background colors and images in the PDF. Defaults to 0.
+    type: integer
+    enum:
+      - 0
+      - 1
+  pdf_one_page:
+    name: pdf_one_page
+    in: query
+    description: Create one long PDF page using the viewport width and document height. Defaults to 0.
+    type: integer
+    enum:
+      - 0
+      - 1
+  pdf_landscape:
+    name: pdf_landscape
+    in: query
+    description: Use landscape orientation for the PDF. Defaults to 0.
+    type: integer
+    enum:
+      - 0
+      - 1
+  pdf_margin:
+    name: pdf_margin
+    in: query
+    description: Set all four PDF margins to a nonnegative length. Units can be px, mm, cm, or in. A value
+      without units is in pixels. Defaults to 0px.
+    type: string
+    pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+    maxLength: 32
+  pdf_margin_top:
+    name: pdf_margin_top
+    in: query
+    description: Override the top PDF margin. Defaults to pdf_margin.
+    type: string
+    pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+    maxLength: 32
+  pdf_margin_bottom:
+    name: pdf_margin_bottom
+    in: query
+    description: Override the bottom PDF margin. Defaults to pdf_margin.
+    type: string
+    pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+    maxLength: 32
+  pdf_margin_left:
+    name: pdf_margin_left
+    in: query
+    description: Override the left PDF margin. Defaults to pdf_margin.
+    type: string
+    pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+    maxLength: 32
+  pdf_margin_right:
+    name: pdf_margin_right
+    in: query
+    description: Override the right PDF margin. Defaults to pdf_margin.
+    type: string
+    pattern: ^\d+(\.\d+)?(px|mm|cm|in)?$
+    maxLength: 32
+  video:
+    name: video
+    in: query
+    description: Record a video or animated GIF in addition to the screenshot. Requires a Chrome capture
+      at device scale 1. Adds one credit per started five seconds. Use video=1 when supplying video_*
+      options.
+    type: integer
+    enum:
+      - 0
+      - 1
+    default: 0
+  video_format:
+    name: video_format
+    in: query
+    description: Recording format. If MP4 encoding is unavailable, the capture can produce WebM. Defaults to webm.
+    type: string
+    enum:
+      - webm
+      - mp4
+      - gif
+  video_duration:
+    name: video_duration
+    in: query
+    description: Maximum recording duration in seconds. Charges are calculated from the requested duration.
+      Defaults to 15 seconds.
+    type: integer
+    minimum: 1
+    maximum: 30
+  video_quality:
+    name: video_quality
+    in: query
+    description: Recording quality. Lower values mean higher quality. Defaults to 30.
+    type: integer
+    minimum: 0
+    maximum: 63
+  video_fps:
+    name: video_fps
+    in: query
+    description: Target frames per second for WebM and MP4. GIF uses 20 fps and ignores this value. Defaults
+      to 30 for WebM and MP4.
+    type: integer
+    minimum: 1
+    maximum: 30
+  video_scale:
+    name: video_scale
+    in: query
+    description: Multiplier for recorded width and height. Defaults to 1 for WebM and MP4 and 0.5 for GIF.
+    type: number
+    minimum: 0.1
+    maximum: 1
+  browser:
+    name: browser
+    in: query
+    type: string
+    enum:
+      - chrome
+      - firefox
+    default: chrome
+    description: Browser engine used for the capture.
+  form_browser:
+    name: browser
+    in: formData
+    type: string
+    enum:
+      - chrome
+      - firefox
+    default: chrome
+    description: Browser engine used for the capture.
+  country:
+    name: country
+    in: query
+    type: string
+    enum:
+      - us
+      - au
+      - de
+      - fi
+      - fr
+      - gb
+      - in
+    default: us
+    description: Capture location, as a lowercase ISO 3166-1 alpha-2 code. United States (us), Australia
+      (au), Germany (de), Finland (fi), France (fr), United Kingdom (gb), and India (in).
+  form_country:
+    name: country
+    in: formData
+    type: string
+    enum:
+      - us
+      - au
+      - de
+      - fi
+      - fr
+      - gb
+      - in
+    default: us
+    description: Capture location, as a lowercase ISO 3166-1 alpha-2 code. United States (us), Australia
+      (au), Germany (de), Finland (fi), France (fr), United Kingdom (gb), and India (in).
+  screen_width:
+    name: screen_width
+    in: query
+    type: integer
+    minimum: 1
+    maximum: 5000
+    default: 1024
+    description: Viewport width in CSS pixels. Omit when using device.
+  form_screen_width:
+    name: screen_width
+    in: formData
+    type: integer
+    minimum: 1
+    maximum: 5000
+    default: 1024
+    description: Viewport width in CSS pixels. Omit when using device.
+  screen_height:
+    name: screen_height
+    in: query
+    type: integer
+    minimum: 1
+    maximum: 5000
+    default: 768
+    description: Viewport height in CSS pixels. Omit when using device.
+  form_screen_height:
+    name: screen_height
+    in: formData
+    type: integer
+    minimum: 1
+    maximum: 5000
+    default: 768
+    description: Viewport height in CSS pixels. Omit when using device.
+  mobile:
+    name: mobile
+    in: query
+    type: integer
+    enum:
+      - 0
+      - 1
+    default: 0
+    description: Use 0 for desktop or 1 for mobile emulation. Omit when using device.
+  form_mobile:
+    name: mobile
+    in: formData
+    type: integer
+    enum:
+      - 0
+      - 1
+    default: 0
+    description: Use 0 for desktop or 1 for mobile emulation. Omit when using device.
+  device:
+    name: device
+    in: query
+    type: string
+    minLength: 1
+    maxLength: 80
+    description: Device key from /device/list. It supplies the viewport, user agent, and mobile and touch
+      settings. Browser and country can still be selected.
+  form_device:
+    name: device
+    in: formData
+    type: string
+    minLength: 1
+    maxLength: 80
+    description: Device key from /device/list. It supplies the viewport, user agent, and mobile and touch
+      settings. Browser and country can still be selected.
+  apps:
+    name: apps
+    in: query
+    type: array
+    minItems: 1
+    maxItems: 10
+    uniqueItems: true
+    items:
+      type: string
+      minLength: 1
+      maxLength: 40
+    collectionFormat: multi
+    description: Account-owned app IDs (slugs or numeric configuration IDs encoded as strings). Repeat apps
+      for multiple IDs, for example apps=archive&apps=notify. As an alternative to repeated values,
+      apps[archive]=captures/{id}.png supplies a per-capture S3 path template. Percent-encode brackets
+      and template characters. App settings and credentials come from the saved configuration. An
+      unknown, disabled, or foreign app is a validation error before any capture is submitted.
+  form_apps:
+    name: apps
+    in: formData
+    type: array
+    minItems: 1
+    maxItems: 10
+    uniqueItems: true
+    items:
+      type: string
+      minLength: 1
+      maxLength: 40
+    collectionFormat: multi
+    description: Account-owned app IDs (slugs or numeric configuration IDs encoded as strings). Repeat apps
+      for multiple IDs, for example apps=archive&apps=notify. As an alternative to repeated values,
+      apps[archive]=captures/{id}.png supplies a per-capture S3 path template. Percent-encode brackets
+      and template characters. App settings and credentials come from the saved configuration. An
+      unknown, disabled, or foreign app is a validation error before any capture is submitted.
+  profiles:
+    name: profiles
+    in: query
+    type: string
+    description: URL-encoded JSON array of one to ten capture settings objects. Each object uses browser,
+      country, screen_width, screen_height, mobile, and device with the same rules and defaults as
+      /screenshot/create. Dimensions and mobile are mutually exclusive with device within each object.
+      When profiles is supplied, omit all six top-level capture settings. Other parameters, including
+      apps, apply to every URL and settings pair.
+    x-decoded-schema:
+      $ref: "#/definitions/CaptureProfiles"
+    x-example: '[{"browser":"chrome","country":"fr","screen_width":1440,"screen_height":900},{"country":"in","device":"iphone_15_pro"}]'
+  hide_popups:
+    name: hide_popups
+    in: query
+    type: integer
+    enum:
+      - 0
+      - 1
+    default: 0
+    description: Hide popups, overlays, and cookie banners.
+  form_hide_popups:
+    name: hide_popups
+    in: formData
+    type: integer
+    enum:
+      - 0
+      - 1
+    default: 0
+    description: Hide popups, overlays, and cookie banners.
+  steps:
+    name: steps
+    in: query
+    type: string
+    description: JSON array of Browshot browser automation steps, in execution order.
+  form_steps:
+    name: steps
+    in: formData
+    type: string
+    description: JSON array of Browshot browser automation steps, in execution order.
+  trackers:
+    name: trackers
+    in: query
+    type: string
+    description: JSON array of Browshot page data trackers.
+  form_trackers:
+    name: trackers
+    in: formData
+    type: string
+    description: JSON array of Browshot page data trackers.
+  tag:
+    name: tag
+    in: query
+    description: Tags to apply to every screenshot in the request. Repeat tag or use comma-separated values. Each tag can contain up to 50 characters.
+    type: array
+    maxItems: 50
+    collectionFormat: multi
+    items:
+      type: string
+      minLength: 1
+      maxLength: 50
+  form_tag:
+    name: tag
+    in: formData
+    description: Tags to apply to every screenshot in the request. Repeat tag or use comma-separated values. Each tag can contain up to 50 characters.
+    type: array
+    maxItems: 50
+    collectionFormat: multi
+    items:
+      type: string
+      minLength: 1
+      maxLength: 50
+  tag_filter:
+    name: tag
+    in: query
+    description: Match screenshots with any of the specified tags. Tags are case-sensitive. Repeat tag or use comma-separated values.
+    type: array
+    maxItems: 50
+    collectionFormat: multi
+    items:
+      type: string
+      minLength: 1
+      maxLength: 50
+responses:
+  PDFDownload:
+    description: PDF file (application/pdf).
+    schema:
+      type: string
+      format: binary
+    headers:
+      Content-Disposition:
+        description: attachment; filename="screenshot.pdf"
+        type: string
+  VideoDownload:
+    description: WebM (video/webm), MP4 (video/mp4), or animated GIF (image/gif).
+    schema:
+      type: string
+      format: binary
+    headers:
+      Content-Disposition:
+        description: Attachment filename is screenshot.webm, screenshot.mp4, or screenshot.gif.
+        type: string
+  InvalidRequest:
+    description: Invalid request parameters or insufficient credits. For downloads, check the screenshot ID.
+    schema:
+      $ref: "#/definitions/ApiError"
+  Unauthorized:
+    description: Missing or invalid API key.
+    schema:
+      $ref: "#/definitions/ApiError"
+  NotFound:
+    description: Resource is missing or belongs to another account. Downloads also return 404 if the capture
+      is unfinished or the artifact is missing or deleted.
+    schema:
+      $ref: "#/definitions/ApiError"
+  Unavailable:
+    description: Unable to process the request or retrieve the file temporarily.
+    schema:
+      $ref: "#/definitions/ApiError"
+  Conflict:
+    description: The resource or requested operation conflicts with its current state.
+    schema:
+      $ref: "#/definitions/ApiError"
+definitions:
+  ApiError:
+    type: object
+    required:
+      - success
+      - error
+      - message
+    properties:
+      success:
+        type: boolean
+        enum:
+          - false
+      error:
+        type: string
+        description: Machine-readable error code.
+        enum:
+          - INVALID_REQUEST
+          - UNAUTHORIZED
+          - NOT_FOUND
+          - CONFLICT
+          - API_UNAVAILABLE
+      message:
+        type: string
+        description: Human-readable error message.
+  Crawl:
+    type: object
+    properties:
+      id:
+        type: integer
+        format: int64
+        description: Crawl ID.
+      status:
+        type: string
+        enum:
+          - in_queue
+          - in_process
+          - finished
+          - error
+      started:
+        type: integer
+        description: Start time as a Unix timestamp.
+      finished:
+        type: integer
+        description: Completion time as a Unix timestamp, or 0 while pending.
+      count:
+        type: integer
+        description: Number of URLs discovered.
+      processed:
+        type: integer
+        description: Number of screenshots processed.
+      failed:
+        type: integer
+        description: Number of failed screenshots.
+      urls:
+        type: array
+        items:
+          $ref: "#/definitions/Screenshot"
+  ScreenshotError:
+    type: object
+    properties:
+      error:
+        type: string
+        description: description of the problem that occurred
+      status:
+        type: string
+        description: status of the request - "in_queue", "processing", "finished", "error"
+      priority:
+        type: number
+        description: priority given to the screenshot - high (1) to low (3)
+      cost:
+        type: number
+        description: number of credits taken
+  ScreenshotInfoError:
+    type: object
+    properties:
+      id:
+        description: screenshot ID
+        type: integer
+      error:
+        type: string
+        description: description of the problem that occurred
+      status:
+        type: string
+        description: status of the request - "in_queue", "processing", "finished", "error"
+  Screenshot:
+    type: object
+    required:
+      - id
+      - status
+      - url
+    properties:
+      id:
+        description: screenshot ID
+        type: integer
+      status:
+        description: |
+          status of the request: "in_queue", "in_process", "finished", "error"
+        type: string
+        enum:
+          - in_queue
+          - in_process
+          - finished
+          - error
+      tag:
+        description: Tags associated with the screenshot, when supplied with the capture.
+        type: array
+        items:
+          type: string
+          maxLength: 50
+      screenshot_url:
+        description: URL to download the screenshot at CSS-pixel dimensions.
+        type: string
+      pdf:
+        description: Present with value 1 when the PDF was requested or is available.
+        type: integer
+        enum:
+          - 1
+      pdf_url:
+        description: Authenticated PDF download URL, or an empty string while unavailable.
+        type: string
+      video:
+        description: Present with value 1 when video was requested or is available.
+        type: integer
+        enum:
+          - 1
+      video_url:
+        description: Authenticated video or GIF download URL, or an empty string while unavailable.
+        type: string
+      device_scale:
+        description: Present with value 2 or 3 for a retina capture.
+        type: integer
+        enum:
+          - 2
+          - 3
+      hide_ads:
+        description: Present with value 1 when ad blocking was enabled.
+        type: integer
+        enum:
+          - 1
+      error:
+        description: description of the problem that occurred
+        type: string
+      priority:
+        description: "priority given to the screenshot: high (1) to low (3)"
+        type: integer
+        minimum: 1
+        maximum: 3
+      url:
+        description: original URL requested
+        type: string
+      size:
+        description: screenshot size requested
+        type: string
+        enum:
+          - screen
+          - page
+      width:
+        description: screenshot width
+        type: integer
+      height:
+        description: screenshot height
+        type: integer
+      final_url:
+        description: URL of the screenshot (redirections can occur)
+        type: string
+      scale:
+        description: image scale. Always 1 for desktop browsers; mobiles may change the scale (zoom in or zoom
+          out) to fit the page on the screen
+        type: number
+        format: double
+      cost:
+        description: number of credits spent for the screenshot
+        type: integer
+      delay:
+        description: number of seconds to wait after page load
+        type: integer
+      browser:
+        type: string
+        enum:
+          - chrome
+          - firefox
+        description: Resolved browser for the capture. May be absent for historical records.
+      country:
+        type: string
+        pattern: "^[a-z]{2}$"
+        description: Resolved country for the capture. Historical records can show other countries.
+      screen_width:
+        type: integer
+        minimum: 1
+        maximum: 20000
+        description: Resolved screen width for the capture. May be absent for historical records.
+      screen_height:
+        type: integer
+        minimum: 1
+        maximum: 20000
+        description: Resolved screen height for the capture. May be absent for historical records.
+      mobile:
+        type: integer
+        enum:
+          - 0
+          - 1
+        description: Resolved mobile for the capture. May be absent for historical records.
+      device:
+        type: string
+        minLength: 1
+        maxLength: 80
+        description: Named device selected for the capture, when supplied.
+      trackers:
+        type: array
+        description: Results of configured page data trackers, when available.
+        items:
+          type: object
+      apps:
+        type: array
+        description: Separate status for each requested app, when available.
+        items:
+          $ref: "#/definitions/AppStatus"
+  ScreenshotList:
+    description: An object keyed by screenshot ID. Each value is the screenshot for that ID.
+    type: object
+    additionalProperties:
+      $ref: '#/definitions/Screenshot'
+    example:
+      "1103982291":
+        id: 1103982291
+        status: in_process
+        url: https://example.com/
+        browser: chrome
+        country: us
+
+      "1103982292":
+        id: 1103982292
+        status: in_process
+        url: https://example.org/
+        browser: chrome
+        country: us
+  Batch:
+    type: object
+    properties:
+      id:
+        type: integer
+        description: batch ID
+      status:
+        type: string
+        description: Batch status.
+        enum:
+          - in_queue
+          - in_process
+          - finished
+          - error
+      started:
+        type: integer
+        description: time of processing (UNIX timestamp)
+      finished:
+        type: integer
+        description: time of batch completed (UNIX timestamp)
+      count:
+        type: integer
+        description: number of unique URLs in the batch
+      processed:
+        type: integer
+        description: number of screenshots finishe
+      failed:
+        type: integer
+        description: number of screenshots failed
+      zip_url:
+        type: string
+        description: Authenticated URL to download the ZIP archive when the batch is finished.
+      urls:
+        type: array
+        description: URLs to download the batch
+        items:
+          type: string
+  BatchError:
+    type: object
+    properties:
+      error:
+        type: string
+        description: description of the problem that occurred
+      status:
+        type: string
+        description: status of the request - "in_queue", "processing", "finished", "error"
+  AccountError:
+    type: object
+    properties:
+      error:
+        type: string
+        description: description of the problem that occurred
+      status:
+        type: string
+        description: status of the request - error
+  Account:
+    type: object
+    required:
+      - balance
+      - free_screenshots_left
+      - free_credits_left
+    properties:
+      balance:
+        description: number of credits left on your account
+        type: integer
+      free_screenshots_left:
+        description: Remaining free monthly allowance, shared with v1.
+        type: integer
+      free_credits_left:
+        description: Remaining free monthly credits usable with any v2 capture option.
+        type: integer
+  Browser:
+    type: object
+    properties:
+      id:
+        description: browser ID
+        type: integer
+      name:
+        description: "browser name and version: Firefox 45, etc."
+        type: string
+      javascript:
+        description: "JavaScript support: 1 if enabled, 0 if disabled"
+        type: integer
+        minimum: 0
+        maximum: 1
+      mobile:
+        description: "Mobile browser: 1 if true, 0 if false"
+        type: integer
+        minimum: 0
+        maximum: 1
+      browser:
+        type: string
+        enum:
+          - chrome
+          - firefox
+        description: Value to send as browser on capture requests.
+    required:
+      - id
+      - name
+      - browser
+  BrowserList:
+    type: object
+    properties:
+      default:
+        type: integer
+    additionalProperties:
+      $ref: "#/definitions/Browser"
+  BrowserError:
+    type: object
+    properties:
+      error:
+        type: string
+        description: description of the problem that occurred
+      status:
+        type: string
+        description: status of the request - error
+  CaptureProfile:
+    type: object
+    properties:
+      browser:
+        type: string
+        enum:
+          - chrome
+          - firefox
+        default: chrome
+        description: Browser engine used for the capture.
+      country:
+        type: string
+        enum:
+          - us
+          - au
+          - de
+          - fi
+          - fr
+          - gb
+          - in
+        default: us
+        description: Capture location, as a lowercase ISO 3166-1 alpha-2 code. United States (us), Australia
+          (au), Germany (de), Finland (fi), France (fr), United Kingdom (gb), and India (in).
+      screen_width:
+        type: integer
+        minimum: 1
+        maximum: 5000
+        default: 1024
+        description: Viewport width in CSS pixels. Omit when using device.
+      screen_height:
+        type: integer
+        minimum: 1
+        maximum: 5000
+        default: 768
+        description: Viewport height in CSS pixels. Omit when using device.
+      mobile:
+        type: integer
+        enum:
+          - 0
+          - 1
+        default: 0
+        description: Use 0 for desktop or 1 for mobile emulation. Omit when using device.
+      device:
+        type: string
+        minLength: 1
+        maxLength: 80
+        description: Device key from /device/list. It supplies the viewport, user agent, and mobile and touch
+          settings. Browser and country can still be selected.
+    description: One capture settings object for /screenshot/multiple. Provide a device or explicit viewport
+      and mobile settings.
+    additionalProperties: false
+  CaptureProfiles:
+    type: array
+    minItems: 1
+    maxItems: 10
+    items:
+      $ref: "#/definitions/CaptureProfile"
+    example:
+      - browser: chrome
+        country: fr
+        screen_width: 1440
+        screen_height: 900
+      - country: in
+        device: iphone_15_pro
+  Device:
+    type: object
+    required:
+      - device
+      - name
+      - screen_width
+      - screen_height
+      - mobile
+    properties:
+      device:
+        type: string
+        minLength: 1
+        maxLength: 80
+      screen_width:
+        type: integer
+        minimum: 1
+        maximum: 5000
+      screen_height:
+        type: integer
+        minimum: 1
+        maximum: 5000
+      mobile:
+        type: integer
+        enum:
+          - 0
+          - 1
+      name:
+        type: string
+    example:
+      device: iphone_15_pro
+      name: iPhone 15 Pro
+      screen_width: 393
+      screen_height: 659
+      mobile: 1
+  AppConfig:
+    type: object
+    properties:
+      bucket:
+        type: string
+        description: Required for S3.
+      region:
+        type: string
+        default: us-east-1
+        description: AWS region for S3.
+      endpoint:
+        type: string
+        format: uri
+        description: Optional public HTTPS S3-compatible endpoint. Defaults to Amazon S3.
+      pathTemplate:
+        type: string
+        description: Optional S3 path and filename template. Include a screenshot ID or other unique value to
+          avoid replacing objects.
+      url:
+        type: string
+        format: uri
+        description: Destination HTTPS URL. Required for webhook.
+        pattern: ^https://
+      accessKeyId:
+        type: string
+        description: S3 access key ID. Required to configure S3, with a secret access key.
+      secretAccessKey:
+        type: string
+        description: S3 secret access key. Required to configure S3, with an access key ID.
+    additionalProperties: false
+    description: Configuration write input. S3 requires bucket, accessKeyId, and secretAccessKey. Webhook
+      requires a public HTTPS URL. Settings for another app type are invalid.
+  AppConfigView:
+    type: object
+    properties:
+      bucket:
+        type: string
+        description: Required for S3.
+      region:
+        type: string
+        default: us-east-1
+        description: AWS region for S3.
+      endpoint:
+        type: string
+        format: uri
+        description: Optional public HTTPS S3-compatible endpoint. Defaults to Amazon S3.
+      pathTemplate:
+        type: string
+        description: Optional S3 path and filename template. Include a screenshot ID or other unique value to
+          avoid replacing objects.
+      url:
+        type: string
+        format: uri
+        description: Destination HTTPS URL. Required for webhook.
+        pattern: ^https://
+    additionalProperties: false
+    description: App configuration safe to return in API responses.
+  App:
+    type: object
+    required:
+      - id
+      - app_id
+      - type
+      - name
+      - isActive
+      - status
+    properties:
+      id:
+        type: integer
+        format: int64
+        minimum: 1
+      app_id:
+        type: string
+        minLength: 1
+        maxLength: 40
+        pattern: ^[a-z0-9-]+$
+      type:
+        type: string
+        enum:
+          - s3
+          - webhook
+      name:
+        type: string
+      isActive:
+        type: boolean
+      status:
+        type: string
+        enum:
+          - active
+          - processing
+          - error
+      config:
+        $ref: "#/definitions/AppConfigView"
+      lastError:
+        type: string
+        description: Latest app setup or connectivity error, if any.
+      lastVerifiedAt:
+        type: string
+        format: date-time
+        description: Last successful connectivity check, if any.
+  AppStatus:
+    type: object
+    required:
+      - id
+      - app_id
+      - type
+      - status
+    properties:
+      id:
+        type: integer
+        format: int64
+        minimum: 1
+      app_id:
+        type: string
+        minLength: 1
+        maxLength: 40
+        pattern: ^[a-z0-9-]+$
+      type:
+        type: string
+        enum:
+          - s3
+          - webhook
+      name:
+        type: string
+      status:
+        type: string
+        enum:
+          - pending
+          - queued
+          - processing
+          - finished
+          - error
+      filename:
+        type: string
+      error:
+        type: string
+      output_url:
+        type: string
+      updated_at:
+        type: string
+        format: date-time
+  CreateApp:
+    type: object
+    required:
+      - type
+      - app_id
+      - name
+      - config
+    properties:
+      type:
+        type: string
+        enum:
+          - s3
+          - webhook
+      app_id:
+        type: string
+        minLength: 1
+        maxLength: 40
+        pattern: ^[a-z0-9-]+$
+      name:
+        type: string
+      config:
+        $ref: "#/definitions/AppConfig"
+    additionalProperties: false
+    example:
+      type: webhook
+      app_id: notify
+      name: Capture notifications
+      config:
+        url: https://example.com/capture-events
+  UpdateApp:
+    type: object
+    required:
+      - id
+    properties:
+      id:
+        type: integer
+        format: int64
+        minimum: 1
+        description: Numeric app configuration ID returned by /app/list or /app/create.
+      app_id:
+        type: string
+        minLength: 1
+        maxLength: 40
+        pattern: ^[a-z0-9-]+$
+      name:
+        type: string
+      isActive:
+        type: boolean
+      config:
+        $ref: "#/definitions/AppConfig"
+    additionalProperties: false
+    minProperties: 2
+  AppId:
+    type: object
+    required:
+      - id
+    properties:
+      id:
+        type: integer
+        format: int64
+        minimum: 1
+        description: Numeric app configuration ID returned by /app/list or /app/create.
+    additionalProperties: false
+  RunApps:
+    type: object
+    required:
+      - screenshot_id
+      - apps
+    properties:
+      screenshot_id:
+        type: integer
+        format: int64
+        minimum: 1
+      apps:
+        type: array
+        minItems: 1
+        maxItems: 10
+        uniqueItems: true
+        items:
+          type: string
+          minLength: 1
+          maxLength: 40
+    additionalProperties: false
+    example:
+      screenshot_id: 12345
+      apps:
+        - archive
+        - notify
+  WebhookDelivery:
+    allOf:
+      - $ref: "#/definitions/Screenshot"
+      - type: object
+        required:
+          - status
+        properties:
+          status:
+            type: string
+            enum:
+              - finished
+              - error
+    description: JSON posted to a webhook app when a screenshot finishes or fails. Mirrors screenshot/info
+      and can be delivered more than once. Deduplicate by screenshot ID and terminal status. Delivery
+      bodies omit account API keys. Any included links that authorize a download are scoped to that
+      artifact.
+x-browshot-draft:
+  visibility: internal
+  compatibility:
+    - Existing captures remain accessible with the same IDs and account API keys.
+    - Direct captures use the shared browser fleet. Dedicated v1 instances remain available through v1.
+    - Configure existing webhook and S3 destinations as v2 apps to use them with v2 captures.
