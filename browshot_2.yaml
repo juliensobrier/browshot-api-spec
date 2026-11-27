@@ -6,7 +6,7 @@ info:
     Internal contract for Browshot API v2.
     Request and response conventions and API key authentication follow Browshot v1.
 
-    Select a browser and capture country directly. Defaults are Chrome, United States,
+    Choose Chrome, Firefox, or Brave and select a capture country. Defaults are Chrome, United States,
     a 1024 × 768 CSS pixel viewport, and desktop emulation. Supply viewport dimensions
     and mobile mode, or select a named device from /device/list. The server rejects
     device combined with screen_width, screen_height, or mobile. Unsupported browser,
@@ -19,7 +19,7 @@ info:
 
     A capture costs one credit. HTML and PDF each add one credit, each additional
     shot adds one credit, and video adds one credit per started five seconds of
-    requested duration. PDF and video require Chrome. Retina and ad blocking add
+    requested duration. PDF and video require Chrome or Brave. Retina and ad blocking add
     no credits. Free monthly credits cover any v2 capture option and are used first,
     followed by paid credits. The free allowance is shared with v1. Failed captures
     and unavailable optional artifacts return the corresponding credits.
@@ -48,6 +48,10 @@ securityDefinitions:
     type: apiKey
     name: X-API-KEY
     in: header
+  webhookArtifactToken:
+    type: apiKey
+    name: artifact_token
+    in: query
 security:
   - apiKeyQuery: []
   - apiKeyHeader: []
@@ -288,7 +292,7 @@ paths:
             - 3
         - name: hide_ads
           in: formData
-          description: Block advertising requests and hide matching ad elements. Adds no credits.
+          description: Block advertising requests and hide matching ad elements. Brave uses its built-in ad blocker. Adds no credits.
           type: integer
           enum:
             - 0
@@ -296,7 +300,7 @@ paths:
           default: 0
         - name: pdf
           in: formData
-          description: Generate a PDF in addition to the screenshot. Requires a Chrome capture and adds one
+          description: Generate a PDF in addition to the screenshot. Requires Chrome or Brave and adds one
             credit. Use pdf=1 when supplying pdf_* options.
           type: integer
           enum:
@@ -365,7 +369,7 @@ paths:
           maxLength: 32
         - name: video
           in: formData
-          description: Record a video or animated GIF in addition to the screenshot. Requires a Chrome capture
+          description: Record a video or animated GIF in addition to the screenshot. Requires Chrome or Brave
             at device scale 1. Adds one credit per started five seconds. Use video=1 when supplying
             video_* options.
           type: integer
@@ -662,7 +666,7 @@ paths:
             - 3
         - name: hide_ads
           in: formData
-          description: Block advertising requests and hide matching ad elements. Adds no credits.
+          description: Block advertising requests and hide matching ad elements. Brave uses its built-in ad blocker. Adds no credits.
           type: integer
           enum:
             - 0
@@ -670,7 +674,7 @@ paths:
           default: 0
         - name: pdf
           in: formData
-          description: Generate a PDF in addition to the screenshot. Requires a Chrome capture and adds one
+          description: Generate a PDF in addition to the screenshot. Requires Chrome or Brave and adds one
             credit. Use pdf=1 when supplying pdf_* options.
           type: integer
           enum:
@@ -739,7 +743,7 @@ paths:
           maxLength: 32
         - name: video
           in: formData
-          description: Record a video or animated GIF in addition to the screenshot. Requires a Chrome capture
+          description: Record a video or animated GIF in addition to the screenshot. Requires Chrome or Brave
             at device scale 1. Adds one credit per started five seconds. Use video=1 when supplying
             video_* options.
           type: integer
@@ -825,6 +829,18 @@ paths:
           description: Screenshot found
           schema:
             $ref: "#/definitions/Screenshot"
+          examples:
+            application/json:
+              id: 1103982291
+              status: finished
+              url: https://example.com/
+              final_url: https://example.com/
+              screenshot_url: "https://api.browshot.com/api/v2/screenshot/thumbnail?id=1103982291&key=YOUR_API_KEY&scale=1"
+              browser: chrome
+              country: us
+              width: 1280
+              height: 1024
+              cost: 1
         "400":
           $ref: "#/responses/InvalidRequest"
         "401":
@@ -916,22 +932,22 @@ paths:
       operationId: GetThumbnail
       x-ms-trigger: none
       description: >-
-        Unlike the other API calls, this API sends back the thumbnail as a PNG file, not JSON. The HTTP
-        response code indicates whether the screenshot was successful (200), or incomplete (404) or
-        failed (404). If the screenshot failed or is not finished, a default image "Not found" is sent.
-
-
-        You can crop your screenshots. The crop is done first, then the thumbnail. You can take a
-        1024x768 screenshot, crop it to 768x768, and get it scaled down to 300x300.
+        Download a finished screenshot as PNG or JPEG. Use width, height, and the crop coordinates
+        to generate a thumbnail. Browshot crops the image before resizing it.
       produces:
         - image/png
         - image/jpeg
+        - application/json
+      security:
+        - apiKeyQuery: []
+        - apiKeyHeader: []
+        - webhookArtifactToken: []
       parameters:
+        - $ref: "#/parameters/WebhookArtifactToken"
         - name: id
           in: query
-          description: screenshot ID
+          description: Screenshot ID. Required for requests authenticated by API key.
           type: integer
-          required: true
         - name: width
           in: query
           description: width of the thumbnail
@@ -1015,9 +1031,20 @@ paths:
         - Screenshot
       responses:
         "200":
-          description: thumbnail
+          description: PNG or JPEG screenshot image.
+          schema:
+            type: string
+            format: binary
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          description: Missing or invalid API key, or an invalid or expired webhook artifact token.
+          schema:
+            $ref: "#/definitions/ApiError"
         "404":
-          description: Screenshot not found
+          description: Screenshot was not found, is not finished, or has failed. The response may be a placeholder image or a JSON error.
+        "503":
+          $ref: "#/responses/Unavailable"
   /screenshot/share:
     get:
       summary: Share a screenshot
@@ -1047,14 +1074,17 @@ paths:
               - url
             properties:
               id:
+                description: ID of the shared screenshot.
                 type: integer
                 format: int64
                 minimum: 1
               status:
+                description: ok when the share succeeds.
                 type: string
                 enum:
                   - ok
               url:
+                description: Public URL of the shared screenshot.
                 type: string
         default:
           description: Screenshot not found
@@ -1092,10 +1122,12 @@ paths:
               - status
             properties:
               id:
+                description: ID of the screenshot whose data was deleted.
                 type: integer
                 format: int64
                 minimum: 1
               status:
+                description: ok when deletion succeeds.
                 type: string
                 enum:
                   - ok
@@ -1111,6 +1143,7 @@ paths:
         specified in the screenshot request.
       produces:
         - text/html
+        - application/json
       parameters:
         - name: id
           in: query
@@ -1120,11 +1153,23 @@ paths:
       tags:
         - Screenshot
       responses:
-        default:
-          description: HTML code
+        "200":
+          description: HTML code of the rendered page.
+          schema:
+            type: string
+          headers:
+            Content-Disposition:
+              description: inline; filename="screenshot.html"
+              type: string
+        "400":
+          $ref: "#/responses/InvalidRequest"
+        "401":
+          $ref: "#/responses/Unauthorized"
+        "404":
+          $ref: "#/responses/NotFound"
+        "503":
+          $ref: "#/responses/Unavailable"
   /screenshot/pdf:
-    parameters:
-      - $ref: "#/parameters/ArtifactScreenshotId"
     get:
       summary: Download a screenshot PDF
       operationId: GetScreenshotPDF
@@ -1137,18 +1182,31 @@ paths:
         - application/json
       tags:
         - Screenshot
+      security:
+        - apiKeyQuery: []
+        - apiKeyHeader: []
+        - webhookArtifactToken: []
+      parameters:
+        - $ref: "#/parameters/ArtifactDownloadId"
+        - $ref: "#/parameters/WebhookArtifactToken"
       responses:
         "200":
           $ref: "#/responses/PDFDownload"
         "400":
           $ref: "#/responses/InvalidRequest"
         "401":
-          $ref: "#/responses/Unauthorized"
+          description: Missing or invalid API key, or an invalid or expired webhook artifact token.
+          schema:
+            $ref: "#/definitions/ApiError"
         "404":
           $ref: "#/responses/NotFound"
         "503":
           $ref: "#/responses/Unavailable"
     post:
+      consumes:
+        - application/x-www-form-urlencoded
+      parameters:
+        - $ref: "#/parameters/ArtifactScreenshotId"
       summary: Download a screenshot PDF
       operationId: PostScreenshotPDF
       description: |-
@@ -1172,8 +1230,6 @@ paths:
         "503":
           $ref: "#/responses/Unavailable"
   /screenshot/video:
-    parameters:
-      - $ref: "#/parameters/ArtifactScreenshotId"
     get:
       summary: Download a screenshot video
       operationId: GetScreenshotVideo
@@ -1188,18 +1244,31 @@ paths:
         - application/json
       tags:
         - Screenshot
+      security:
+        - apiKeyQuery: []
+        - apiKeyHeader: []
+        - webhookArtifactToken: []
+      parameters:
+        - $ref: "#/parameters/ArtifactDownloadId"
+        - $ref: "#/parameters/WebhookArtifactToken"
       responses:
         "200":
           $ref: "#/responses/VideoDownload"
         "400":
           $ref: "#/responses/InvalidRequest"
         "401":
-          $ref: "#/responses/Unauthorized"
+          description: Missing or invalid API key, or an invalid or expired webhook artifact token.
+          schema:
+            $ref: "#/definitions/ApiError"
         "404":
           $ref: "#/responses/NotFound"
         "503":
           $ref: "#/responses/Unavailable"
     post:
+      consumes:
+        - application/x-www-form-urlencoded
+      parameters:
+        - $ref: "#/parameters/ArtifactScreenshotId"
       summary: Download a screenshot video
       operationId: PostScreenshotVideo
       description: |-
@@ -1335,7 +1404,7 @@ paths:
             - 3
         - name: hide_ads
           in: formData
-          description: Block advertising requests and hide matching ad elements. Adds no credits.
+          description: Block advertising requests and hide matching ad elements. Brave uses its built-in ad blocker. Adds no credits.
           type: integer
           enum:
             - 0
@@ -1343,7 +1412,7 @@ paths:
           default: 0
         - name: pdf
           in: formData
-          description: Generate a PDF in addition to the screenshot. Requires a Chrome capture and adds one
+          description: Generate a PDF in addition to the screenshot. Requires Chrome or Brave and adds one
             credit. Use pdf=1 when supplying pdf_* options.
           type: integer
           enum:
@@ -1412,7 +1481,7 @@ paths:
           maxLength: 32
         - name: video
           in: formData
-          description: Record a video or animated GIF in addition to the screenshot. Requires a Chrome capture
+          description: Record a video or animated GIF in addition to the screenshot. Requires Chrome or Brave
             at device scale 1. Adds one credit per started five seconds. Use video=1 when supplying
             video_* options.
           type: integer
@@ -1629,7 +1698,7 @@ paths:
             - 3
         - name: hide_ads
           in: formData
-          description: Block advertising requests and hide matching ad elements. Adds no credits.
+          description: Block advertising requests and hide matching ad elements. Brave uses its built-in ad blocker. Adds no credits.
           type: integer
           enum:
             - 0
@@ -1637,7 +1706,7 @@ paths:
           default: 0
         - name: pdf
           in: formData
-          description: Generate a PDF in addition to the screenshot. Requires a Chrome capture and adds one
+          description: Generate a PDF in addition to the screenshot. Requires Chrome or Brave and adds one
             credit. Use pdf=1 when supplying pdf_* options.
           type: integer
           enum:
@@ -1706,7 +1775,7 @@ paths:
           maxLength: 32
         - name: video
           in: formData
-          description: Record a video or animated GIF in addition to the screenshot. Requires a Chrome capture
+          description: Record a video or animated GIF in addition to the screenshot. Requires Chrome or Brave
             at device scale 1. Adds one credit per started five seconds. Use video=1 when supplying
             video_* options.
           type: integer
@@ -1833,6 +1902,7 @@ paths:
           enum:
             - chrome
             - firefox
+            - brave
       tags:
         - Browser
       responses:
@@ -1878,6 +1948,7 @@ paths:
               - devices
             properties:
               devices:
+                description: Device presets available for capture requests.
                 type: array
                 items:
                   $ref: "#/definitions/Device"
@@ -2271,7 +2342,7 @@ paths:
             - 3
         - name: hide_ads
           in: formData
-          description: Block advertising requests and hide matching ad elements. Adds no credits.
+          description: Block advertising requests and hide matching ad elements. Brave uses its built-in ad blocker. Adds no credits.
           type: integer
           enum:
             - 0
@@ -2279,7 +2350,7 @@ paths:
           default: 0
         - name: pdf
           in: formData
-          description: Generate a PDF in addition to the screenshot. Requires a Chrome capture and adds one
+          description: Generate a PDF in addition to the screenshot. Requires Chrome or Brave and adds one
             credit. Use pdf=1 when supplying pdf_* options.
           type: integer
           enum:
@@ -2348,7 +2419,7 @@ paths:
           maxLength: 32
         - name: video
           in: formData
-          description: Record a video or animated GIF in addition to the screenshot. Requires a Chrome capture
+          description: Record a video or animated GIF in addition to the screenshot. Requires Chrome or Brave
             at device scale 1. Adds one credit per started five seconds. Use video=1 when supplying
             video_* options.
           type: integer
@@ -2888,6 +2959,7 @@ paths:
               - apps
             properties:
               apps:
+                description: App configurations belonging to the account.
                 type: array
                 items:
                   $ref: "#/definitions/App"
@@ -3011,10 +3083,12 @@ paths:
               - status
             properties:
               id:
+                description: ID of the deleted app configuration.
                 type: integer
                 format: int64
                 minimum: 1
               status:
+                description: ok when deletion succeeds.
                 type: string
                 enum:
                   - ok
@@ -3051,10 +3125,12 @@ paths:
               - status
             properties:
               id:
+                description: ID of the app being tested.
                 type: integer
                 format: int64
                 minimum: 1
               status:
+                description: processing while the app check is queued.
                 type: string
                 enum:
                   - processing
@@ -3092,10 +3168,12 @@ paths:
               - apps
             properties:
               id:
+                description: ID of the screenshot the apps will process.
                 type: integer
                 format: int64
                 minimum: 1
               apps:
+                description: Current run status for each requested app.
                 type: array
                 items:
                   $ref: "#/definitions/AppStatus"
@@ -3158,6 +3236,7 @@ paths:
             required: [tags]
             properties:
               tags:
+                description: Distinct tags on screenshots in the account.
                 type: array
                 items:
                   type: string
@@ -3166,9 +3245,23 @@ paths:
         "503":
           $ref: "#/responses/Unavailable"
 parameters:
-  ArtifactScreenshotId:
+  WebhookArtifactToken:
+    name: artifact_token
+    in: query
+    description: Download token supplied in a webhook artifact URL. Use the URL as delivered. The token authorizes only that file and expires after 24 hours.
+    type: string
+    maxLength: 1024
+    pattern: '^[A-Za-z0-9_-]+$'
+  ArtifactDownloadId:
     name: id
     in: query
+    description: Screenshot ID returned by screenshot/create or screenshot/info. Required for requests authenticated by API key.
+    type: integer
+    format: int64
+    minimum: 1
+  ArtifactScreenshotId:
+    name: id
+    in: formData
     description: Screenshot ID returned by /screenshot/create or /screenshot/info.
     required: true
     type: integer
@@ -3187,7 +3280,7 @@ parameters:
   hide_ads:
     name: hide_ads
     in: query
-    description: Block advertising requests and hide matching ad elements. Adds no credits.
+    description: Block advertising requests and hide matching ad elements. Brave uses its built-in ad blocker. Adds no credits.
     type: integer
     enum:
       - 0
@@ -3196,7 +3289,7 @@ parameters:
   pdf:
     name: pdf
     in: query
-    description: Generate a PDF in addition to the screenshot. Requires a Chrome capture and adds one
+    description: Generate a PDF in addition to the screenshot. Requires Chrome or Brave and adds one
       credit. Use pdf=1 when supplying pdf_* options.
     type: integer
     enum:
@@ -3275,7 +3368,7 @@ parameters:
   video:
     name: video
     in: query
-    description: Record a video or animated GIF in addition to the screenshot. Requires a Chrome capture
+    description: Record a video or animated GIF in addition to the screenshot. Requires Chrome or Brave
       at device scale 1. Adds one credit per started five seconds. Use video=1 when supplying video_*
       options.
     type: integer
@@ -3329,6 +3422,7 @@ parameters:
     enum:
       - chrome
       - firefox
+      - brave
     default: chrome
     description: Browser engine used for the capture.
   form_browser:
@@ -3338,6 +3432,7 @@ parameters:
     enum:
       - chrome
       - firefox
+      - brave
     default: chrome
     description: Browser engine used for the capture.
   country:
@@ -3602,6 +3697,7 @@ definitions:
       - message
     properties:
       success:
+        description: Always false for an error response.
         type: boolean
         enum:
           - false
@@ -3625,6 +3721,7 @@ definitions:
         format: int64
         description: Crawl ID.
       status:
+        description: Current crawl status.
         type: string
         enum:
           - in_queue
@@ -3647,6 +3744,7 @@ definitions:
         type: integer
         description: Number of failed screenshots.
       urls:
+        description: Screenshot results for the URLs discovered in the crawl.
         type: array
         items:
           $ref: "#/definitions/Screenshot"
@@ -3703,7 +3801,7 @@ definitions:
           type: string
           maxLength: 50
       screenshot_url:
-        description: URL to download the screenshot at CSS-pixel dimensions.
+        description: URL to download the screenshot at CSS-pixel dimensions. Empty until the capture finishes successfully.
         type: string
       pdf:
         description: Present with value 1 when the PDF was requested or is available.
@@ -3758,6 +3856,26 @@ definitions:
       final_url:
         description: URL of the screenshot (redirections can occur)
         type: string
+      final_urls:
+        description: Final URL of the page at each capture in the sequence.
+        type: array
+        items:
+          type: string
+      html:
+        description: Whether HTML was requested. Use screenshot/html to retrieve it.
+        type: integer
+        enum:
+          - 0
+          - 1
+      shots:
+        description: Number of screenshots requested.
+        type: integer
+      shot_interval:
+        description: Time in seconds between consecutive screenshots.
+        type: integer
+      time_added:
+        description: UNIX timestamp in seconds when the capture was requested.
+        type: integer
       scale:
         description: image scale. Always 1 for desktop browsers; mobiles may change the scale (zoom in or zoom
           out) to fit the page on the screen
@@ -3774,6 +3892,7 @@ definitions:
         enum:
           - chrome
           - firefox
+          - brave
         description: Resolved browser for the capture. May be absent for historical records.
       country:
         type: string
@@ -3891,6 +4010,11 @@ definitions:
       - free_screenshots_left
       - free_credits_left
     properties:
+      active:
+        description: Account is active. A successful response contains 1.
+        type: integer
+        enum:
+          - 1
       balance:
         description: number of credits left on your account
         type: integer
@@ -3907,7 +4031,7 @@ definitions:
         description: browser ID
         type: integer
       name:
-        description: "browser name and version: Firefox 45, etc."
+        description: Display name of the browser engine.
         type: string
       javascript:
         description: "JavaScript support: 1 if enabled, 0 if disabled"
@@ -3924,6 +4048,7 @@ definitions:
         enum:
           - chrome
           - firefox
+          - brave
         description: Value to send as browser on capture requests.
     required:
       - id
@@ -3933,6 +4058,7 @@ definitions:
     type: object
     properties:
       default:
+        description: ID of the default browser. The other keys are browser IDs.
         type: integer
     additionalProperties:
       $ref: "#/definitions/Browser"
@@ -3953,6 +4079,7 @@ definitions:
         enum:
           - chrome
           - firefox
+          - brave
         default: chrome
         description: Browser engine used for the capture.
       country:
@@ -4019,23 +4146,28 @@ definitions:
       - mobile
     properties:
       device:
+        description: Device key to use in a capture request.
         type: string
         minLength: 1
         maxLength: 80
       screen_width:
+        description: Preset viewport width in CSS pixels.
         type: integer
         minimum: 1
         maximum: 5000
       screen_height:
+        description: Preset viewport height in CSS pixels.
         type: integer
         minimum: 1
         maximum: 5000
       mobile:
+        description: Whether mobile emulation is enabled. 1 means enabled.
         type: integer
         enum:
           - 0
           - 1
       name:
+        description: Display name of the device.
         type: string
     example:
       device: iphone_15_pro
@@ -4109,25 +4241,31 @@ definitions:
       - status
     properties:
       id:
+        description: Numeric app configuration ID.
         type: integer
         format: int64
         minimum: 1
       app_id:
+        description: App identifier to pass in the apps parameter of capture requests.
         type: string
         minLength: 1
         maxLength: 40
         pattern: ^[a-z0-9-]+$
       type:
+        description: Destination type. Use s3 for access keys, aws_s3 for access granted to Browshot, or webhook for HTTPS delivery.
         type: string
         enum:
           - s3
           - aws_s3
           - webhook
       name:
+        description: Display name of the app.
         type: string
       isActive:
+        description: Whether the app is enabled for captures.
         type: boolean
       status:
+        description: Current app setup or connectivity check status.
         type: string
         enum:
           - active
@@ -4151,23 +4289,28 @@ definitions:
       - status
     properties:
       id:
+        description: Numeric app configuration ID.
         type: integer
         format: int64
         minimum: 1
       app_id:
+        description: App identifier used in the capture request.
         type: string
         minLength: 1
         maxLength: 40
         pattern: ^[a-z0-9-]+$
       type:
+        description: Destination type.
         type: string
         enum:
           - s3
           - aws_s3
           - webhook
       name:
+        description: Display name of the app.
         type: string
       status:
+        description: State of this app run for the screenshot.
         type: string
         enum:
           - pending
@@ -4176,12 +4319,16 @@ definitions:
           - finished
           - error
       filename:
+        description: S3 object key written by a successful upload.
         type: string
       error:
+        description: Delivery error, when available.
         type: string
       output_url:
+        description: URL of the app output, when returned.
         type: string
       updated_at:
+        description: Time of the latest app run update.
         type: string
         format: date-time
   CreateApp:
@@ -4285,10 +4432,10 @@ definitions:
             enum:
               - finished
               - error
-    description: JSON posted to a webhook app when a screenshot finishes or fails. Mirrors screenshot/info
-      and can be delivered more than once. Deduplicate by screenshot ID and terminal status. Delivery
-      bodies omit account API keys. Any included links that authorize a download are scoped to that
-      artifact.
+    description: JSON posted to a webhook app when a screenshot finishes or fails. Includes all fields
+      from screenshot/info, including screenshot_url and any available PDF and video URLs. Download
+      URLs contain artifact-specific tokens that expire after 24 hours. A delivery can be sent more
+      than once. Deduplicate by screenshot ID and terminal status.
 x-browshot-draft:
   visibility: internal
   compatibility:
